@@ -1,0 +1,20 @@
+{
+  "name": "sept",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "client",
+    "core",
+    "crypto",
+    "server"
+  ],
+  "scripts": {
+    "scaffold:server": "node scripts/scaffold-server.js",
+    "test": "cd client/tests && node test.js",
+    "mkdocs": "typedoc client/src/index.d.ts --out docs/api"
+  },
+  "devDependencies": {
+    "typedoc": "^0.28.20"
+  }
+}
