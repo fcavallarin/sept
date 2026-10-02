@@ -1,32 +1,26 @@
 # SEPT JavaScript quick start
 
-This guide shows the shape of direct `@sept/client` usage. The FMNet CLI remains the easiest runnable end-to-end example because it already provides datastore wiring, user interaction and application event definitions.
+This guide shows direct `@sept/client` usage in an application.
 
-## Install from the monorepo
+## Install
 
-From the repository root, install only the workspaces required by the SEPT JavaScript client:
+Install the client package in your application:
 
 ```bash
-npm run install:client
+npm install @sept/client
 ```
 
-The client-only installation includes:
+`@sept/client` brings in the SEPT core and crypto packages it requires.
 
-```text
-@sept/client
-@sept/core
-@sept/crypto
-```
+`SeptClient` also requires a supported SQLite datastore adapter configuration and a SEPT relay endpoint.
 
-Use plain `npm install` instead when developing the complete monorepo, including the Cloudflare server/Worker and FMNet applications.
-
-`SeptClient` requires a SQLite-compatible datastore adapter configuration and a SEPT relay endpoint.
-
-For this Node.js example, also install the SQLite driver:
+For the Node.js example below, install the SQLite driver:
 
 ```bash
 npm install better-sqlite3
 ```
+
+If you are developing SEPT itself from this repository, use `npm install` at the repository root instead.
 
 ## Create a client
 
@@ -55,7 +49,7 @@ const sept = await SeptClient.create({
 - `better-sqlite`
 - `expo-sqlite`
 
-The `open` and `close` functions are supplied by the host application. See FMNet's Node and mobile integrations for concrete wiring.
+The `open` and `close` functions are supplied by the host application. Use the adapter appropriate for the runtime in which your application runs.
 
 ## Create a network
 
@@ -97,22 +91,19 @@ The returned value can be transported to an admin through your UI, QR code or an
 On an existing admin device:
 
 ```js
-const pin = await adminSept.addDevice(
+const { pin, pairing } = await adminSept.addDevice(
   deviceData,
   {
     deviceMetadata: deviceData.metadata,
     adminMetadata: deviceData.metadata,
   },
-  async (deviceId, metadata) => {
-    console.log("paired", deviceId, metadata)
-  },
-  async deviceId => {
-    console.log("pairing timed out", deviceId)
-  },
   60,
 )
 
 console.log("Pairing PIN:", pin)
+
+const { deviceId, metadata } = await pairing
+console.log("paired", deviceId, metadata)
 ```
 
 On the joining device:
@@ -123,7 +114,7 @@ const metadata = await joiningSept.pairDevice(pin)
 
 The pairing PIN is short-lived. The joining device has no previously trusted admin key at this point, so pairing is the trust-bootstrap phase; read [Security](security.md#pairing-trust-bootstrap) before building a high-risk enrollment flow.
 
-Once the device has been successfully paired, the `adminMetadata` object provided during pairing is passed as the second argument to the success callback, while `deviceMetadata` is returned by `pairDevice()`.
+Once pairing completes, the `pairing` promise resolves with `{ deviceId, metadata }`, where `metadata` is the admin-side metadata associated with the paired device. The joining device receives `deviceMetadata` from `pairDevice()`. The `pairing` promise rejects if pairing fails or times out.
 
 ## Register an application event
 
@@ -262,9 +253,17 @@ await sept.sync()
 ```js
 const myDeviceId = await sept.getDeviceId()
 const networkId = await sept.getNetworkId()
+
 const devices = await sept.getDevices()
 const admins = await sept.getAdmins()
 const graph = await sept.getDeviceGraph()
+
+const isCurrentAdmin = await sept.isCurrentDeviceAdmin()
+const isAdmin = await sept.isAdmin(deviceId)
+
+const policy = await sept.getPolicy(srcDeviceId, dstDeviceId)
+const allowed = await sept.checkPolicy(srcDeviceId, dstDeviceId, "message.send")
+
 const events = await sept.getStoredEvents()
 ```
 

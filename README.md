@@ -14,7 +14,7 @@ Start here:
 - [Authorization model](docs/authorization.md)
 - [Security model and current limitations](docs/security.md)
 - [Self-hosting the relay](docs/self-hosting.md)
-- [Client API](docs/api/index.html)
+- [Client API](https://fcavallarin.github.io/sept/api/)
 - [Event filtering](docs/event-filtering.md)
 
 > **Project status:** SEPT is under active development and has not received an independent security audit. See [Security](docs/security.md) before using it in a high-risk environment.

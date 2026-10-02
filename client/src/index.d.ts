@@ -662,7 +662,7 @@ export class SeptClient {
    *
    * @example
    * ```ts
-   * const store = sept.appStorage("fmnet")
+   * const store = sept.appStorage("my-app")
    *
    * await store.set("value", 1)
    * await store.set("value", current => (current ?? 0) + 1)

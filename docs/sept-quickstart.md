@@ -253,9 +253,17 @@ await sept.sync()
 ```js
 const myDeviceId = await sept.getDeviceId()
 const networkId = await sept.getNetworkId()
+
 const devices = await sept.getDevices()
 const admins = await sept.getAdmins()
 const graph = await sept.getDeviceGraph()
+
+const isCurrentAdmin = await sept.isCurrentDeviceAdmin()
+const isAdmin = await sept.isAdmin(deviceId)
+
+const policy = await sept.getPolicy(srcDeviceId, dstDeviceId)
+const allowed = await sept.checkPolicy(srcDeviceId, dstDeviceId, "message.send")
+
 const events = await sept.getStoredEvents()
 ```
 

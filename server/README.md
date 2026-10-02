@@ -18,6 +18,6 @@ The reference Cloudflare deployment lives in `apps/worker`.
 
 See:
 
-- [`docs/architecture.md`](../../docs/architecture.md)
-- [`docs/self-hosting.md`](../../docs/self-hosting.md)
-- [`docs/security.md`](../../docs/security.md)
+- [`docs/architecture.md`](../docs/architecture.md)
+- [`docs/self-hosting.md`](../docs/self-hosting.md)
+- [`docs/security.md`](../docs/security.md)

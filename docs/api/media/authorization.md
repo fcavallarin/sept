@@ -180,7 +180,7 @@ Local stores ignore revoked devices in normal device lookups/graph queries.
 
 ## Application-level identities
 
-SEPT policies are device-to-device. FMNet may expose a higher-level identity containing multiple devices and then expand one user-facing grant into multiple device-to-device grants.
+SEPT policies are device-to-device. An application may expose a higher-level identity containing multiple devices and expand one user-facing grant into multiple device-to-device grants.
 
 That identity expansion belongs to the application layer. SEPT itself keeps the authorization primitive explicit and device-oriented.
 

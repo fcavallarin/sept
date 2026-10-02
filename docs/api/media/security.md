@@ -1,6 +1,6 @@
 # Security model
 
-> **Important:** SEPT and FMNet are under active development and have not received an independent security audit. This document describes the current implementation and known assumptions; it is not a security certification.
+> **Important:** SEPT is under active development and has not received an independent security audit. This document describes the current implementation and known assumptions; it is not a security certification.
 
 ## Goals
 

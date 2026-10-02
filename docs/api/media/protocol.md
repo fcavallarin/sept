@@ -206,7 +206,7 @@ sept.device.invalidate
 
 These are handled internally rather than through application `register()`
 handlers. After updating local state, the client emits the corresponding local
-client event documented in the [Client API](docs/api/classes/SeptClient.html#on).
+client event documented in the [Client API](api/classes/SeptClient.html#on).
 
 A received system event is applied only when the sender is locally recognized as an admin. System events are treated as non-skippable during local processing. If a system-event handler fails, the event remains locally unprocessed and is retried during a subsequent processing pass. This retry is independent of relay delivery: the event has already been ACKed after it was successfully received and persisted.
 
@@ -252,15 +252,8 @@ After a device is registered, REST requests are authenticated with SEPT request 
 
 This relay authentication is distinct from application-event authorization. The relay decides whether a request comes from a registered transport identity; the recipient client decides whether the sender is permitted to perform a specific application event.
 
-## Protocol vs FMNet
+## Protocol vs application behavior
 
-The following are not intrinsic SEPT wire-protocol concepts:
+SEPT does not define application semantics such as chat conversations, device commands, agent tools, media sessions, tunnels or user-interface behavior.
 
-- chat conversations;
-- WebRTC SDP/ICE semantics;
-- TCP tunnels;
-- remote shell behavior;
-- custom FMNet actions;
-- Expo push UX.
-
-Those are application features that can use SEPT events for authenticated/authorized coordination.
+Applications define their own typed events and may use SEPT for authenticated, authorized and durable coordination. Those application event vocabularies are intentionally outside the SEPT wire protocol.

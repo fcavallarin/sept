@@ -15,5 +15,5 @@ The implementation uses Noble JavaScript cryptography packages and is designed t
 
 Protocol-level usage and trust assumptions are documented in:
 
-- [`docs/protocol.md`](../../docs/protocol.md)
-- [`docs/security.md`](../../docs/security.md)
+- [`docs/protocol.md`](../docs/protocol.md)
+- [`docs/security.md`](../docs/security.md)
