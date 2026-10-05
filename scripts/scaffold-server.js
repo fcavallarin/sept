@@ -41,7 +41,7 @@ console.log(`
     npm install
     wrangler d1 create --binding DB --update-config ${name}
     wrangler r2 bucket create --binding STORAGE --update-config ${name}
-    wrangler d1 migrations apply ${name} --remote
+    wrangler d1 migrations apply DB --remote
     wrangler deploy
 `)
 console.log()

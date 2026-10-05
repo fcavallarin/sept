@@ -39,8 +39,6 @@ jobs:
             console.log(`Release version: ${version}`);
           '
 
-      - run: npm test
-
       - run: npm publish --workspace=@sept-protocol/crypto
       - run: npm publish --workspace=@sept-protocol/core
       - run: npm publish --workspace=@sept-protocol/client

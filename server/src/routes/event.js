@@ -1,6 +1,6 @@
 import { getAuth, httpError, json, readJson } from '../lib/http.js';
 import { deserializeBin, serializeEvent } from '@sept-protocol/core';
-import { verifyString } from '@sept-protocolcrypto';
+import { verifyString } from '@sept-protocol/crypto';
 import { D1Adapter, now } from '@sept-protocol/core';
 
 
