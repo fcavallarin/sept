@@ -37,7 +37,7 @@ class SeptTest {
   }
 
   async test_bootstrap_and_add_devices(testId) {
-    await this.appAdmin.bootstrap()
+    await this.appAdmin.createNetwork()
     console.log(`Bootstrap done`)
 
     for (let i = 1; i <= NUM_DEVICES - 1; i++) {
@@ -118,13 +118,13 @@ class SeptTest {
     console.log(`All Devices sync done`)
 
 
-    const d1Graph = await this.appDevice1.getDeviceGraph();
+    const d1Graph = await this.appDevice1.getACL();
     assert(d1Graph.length == 1, `d1Graph len = ${d1Graph.length}`)
     assert(d1Graph[0].srcDeviceId == this.appDevice1DeviceId, `d1Graph[0].srcDeviceId = ${d1Graph[0].srcDeviceId}`)
     assert(d1Graph[0].dstDeviceId == this.appDevice2DeviceId, `d1Graph[0].dstDeviceId = ${d1Graph[0].dstDeviceId}`)
     assert(d1Graph[0].policy.allowedEventTypes[0] == "message", `d1Graph[0].policy = ${JSON.stringify(d1Graph[0].policy)}`)
 
-    const d2Graph = await this.appDevice2.getDeviceGraph();
+    const d2Graph = await this.appDevice2.getACL();
     assert(d2Graph.length == 1, `d2Graph len = ${d2Graph.length}`)
     assert(d2Graph[0].srcDeviceId == this.appDevice1DeviceId, `d2Graph[0].srcDeviceId = ${d2Graph[0].srcDeviceId}`)
     assert(d2Graph[0].dstDeviceId == this.appDevice2DeviceId, `d2Graph[0].dstDeviceId = ${d2Graph[0].dstDeviceId}`)
@@ -176,12 +176,12 @@ class SeptTest {
     await this.appDevice2.sync()
     console.log(`Device 2 sync done`)
 
-    const d1Graph = await this.appDevice1.getDeviceGraph();
+    const d1Graph = await this.appDevice1.getACL();
     assert(d1Graph.length == 2, `d1Graph len = ${d1Graph.length}`)
     assert(d1Graph[1].srcDeviceId == this.appDevice2DeviceId, `d1Graph[1].srcDeviceId = ${d1Graph[1].srcDeviceId}`)
     assert(d1Graph[1].dstDeviceId == this.appDevice1DeviceId, `d1Graph[1].dstDeviceId = ${d1Graph[1].dstDeviceId}`)
 
-    const d2Graph = await this.appDevice2.getDeviceGraph();
+    const d2Graph = await this.appDevice2.getACL();
     assert(d2Graph.length == 2, `d2Graph len = ${d2Graph.length}`)
     assert(d2Graph[1].srcDeviceId == this.appDevice2DeviceId, `d2Graph[1].srcDeviceId = ${d2Graph[1].srcDeviceId}`)
     assert(d2Graph[1].dstDeviceId == this.appDevice1DeviceId, `d2Graph[1].dstDeviceId = ${d2Graph[1].dstDeviceId}`)
@@ -366,8 +366,8 @@ class SeptTest {
     );
     await this._sync_client_devices()
 
-    let d1Graph = await this.appDevice1.septClient.getDeviceGraph()
-    let aGraph = await this.appAdmin.septClient.getDeviceGraph()
+    let d1Graph = await this.appDevice1.septClient.getACL()
+    let aGraph = await this.appAdmin.septClient.getACL()
     assert(
       canonicalJson(d1Graph) !== canonicalJson(aGraph),
       "Device graph is the same between admin and Device1, this test may be incompete"
@@ -376,12 +376,12 @@ class SeptTest {
     await this.appAdmin.grantAdmin(this.appDevice1DeviceId)
     await this._sync_client_devices()
 
-    d1Graph = (await this.appDevice1.septClient.getDeviceGraph()).map(p => ({
+    d1Graph = (await this.appDevice1.septClient.getACL()).map(p => ({
       srcDeviceId: p.srcDeviceId,
       dstDeviceId: p.dstDeviceId,
       policy: p.policy
     }))
-    aGraph = (await this.appAdmin.septClient.getDeviceGraph()).map(p => ({
+    aGraph = (await this.appAdmin.septClient.getACL()).map(p => ({
       srcDeviceId: p.srcDeviceId,
       dstDeviceId: p.dstDeviceId,
       policy: p.policy
@@ -498,7 +498,7 @@ class SeptTest {
     }
     assert(exception, "Exception not raised after device invalidation")
 
-    const graph = await this.appDevice1.septClient.getDeviceGraph()
+    const graph = await this.appDevice1.septClient.getACL()
     for (const g of graph) {
       assert(
         g.srcDeviceId !== this.appDevice2DeviceId && g.dstDeviceId !== this.appDevice2DeviceId,

@@ -6,8 +6,8 @@
  * in the implementation are internal and intentionally omitted.
  *
  * @remarks
- * SEPT is pre-1.0. The declarations describe the current API but should not be
- * interpreted as a permanently frozen TypeScript contract.
+ * Public instance methods are bound to the client instance and may be
+ * passed as callbacks without losing `this`.
  */
 
 export type DeviceId = string;
@@ -356,20 +356,20 @@ export class SeptClient {
    * Reserved wire-event names corresponding to system events are documented in
    * `protocol.md#system-event-namespace`.
    */
-  on: <TPayload = unknown>(
+  on<TPayload = unknown>(
     eventName: UiEventName,
     handler: UiEventHandler<TPayload>,
-  ) => void;
+  ): void;
 
   /**
    * Starts periodic synchronization.
    *
    * @param time Polling interval in seconds.
    */
-  startPolling: (time: number) => void;
+  startPolling(time: number): void;
 
   /** Stops the polling interval started by {@link startPolling}. */
-  stopPolling: () => void;
+  stopPolling(): void;
 
   /**
    * Calls a custom relay endpoint using the SEPT signed-request client.
@@ -385,17 +385,17 @@ export class SeptClient {
    * })
    * ```
    */
-  callRest: <TJson = unknown>(
+  callRest<TJson = unknown>(
     path: string,
     options?: RestCallOptions,
-  ) => Promise<RestCallResult<TJson>>;
+  ): Promise<RestCallResult<TJson>>;
 
   /**
    * Creates a new SEPT network and the first admin/root device.
    *
    * @returns The newly created network ID.
    */
-  bootstrap: () => Promise<NetworkId>;
+  createNetwork(): Promise<NetworkId>;
 
   /**
    * Sends an application event.
@@ -415,11 +415,11 @@ export class SeptClient {
    * )
    * ```
    */
-  send: <TPayload = unknown>(
+  send<TPayload = unknown>(
     type: EventType,
     payload: TPayload,
     dstDeviceIds: DeviceId[],
-  ) => Promise<void>;
+  ): Promise<void>;
 
   /**
    * Starts admin-side pairing for a new device.
@@ -453,14 +453,14 @@ export class SeptClient {
    * const { deviceId, metadata } = await pairing
    * ```
    */
-  addDevice: <
+  addDevice<
     TDeviceMetadata = Record<string, unknown>,
     TAdminMetadata = Record<string, unknown>,
   >(
     deviceData: PairingDeviceData,
     metadata?: AddDeviceMetadata<TDeviceMetadata, TAdminMetadata>,
     pairingTimeout?: number,
-  ) => Promise<AddDeviceResult<TAdminMetadata>>;
+  ): Promise<AddDeviceResult<TAdminMetadata>>;
 
   /**
    * Redeems a pairing PIN on the joining-device side.
@@ -469,9 +469,9 @@ export class SeptClient {
    *
    * @returns Pairing metadata intended for the joining device.
    */
-  pairDevice: <TMetadata = Record<string, unknown>>(
+  pairDevice<TMetadata = Record<string, unknown>>(
     pin: PairingPin,
-  ) => Promise<TMetadata>;
+  ): Promise<TMetadata>;
 
   /**
    * Initializes signing and encryption keys for a device that has not joined a
@@ -479,36 +479,32 @@ export class SeptClient {
    *
    * @returns Transport-safe device ID and serialized public keys.
    */
-  initDevice: () => Promise<PairingDeviceData>;
+  initDevice(): Promise<PairingDeviceData>;
 
   /**
    * Obtains a relay ticket, opens the WebSocket connection and synchronizes
    * pending events.
-   *
-   * @remarks
-   * This method is bound as a public arrow function and can be passed as a
-   * callback without losing `this`.
    */
-  connect: () => Promise<void>;
+  connect(): Promise<void>;
 
   /** Closes the current WebSocket connection. */
-  disconnect: () => Promise<void>;
+  disconnect(): Promise<void>;
 
   /** Returns the current public connection status. */
-  getConnectionStatus: () => ConnectionStatus;
+  getConnectionStatus(): ConnectionStatus;
 
   /** Returns the current network ID, or `null` when no network is configured. */
-  getNetworkId: () => Promise<NetworkId | null>;
+  getNetworkId(): Promise<NetworkId | null>;
 
   /** Returns the current local device ID, or `null` when uninitialized. */
-  getDeviceId: () => Promise<DeviceId | null>;
+  getDeviceId(): Promise<DeviceId | null>;
 
   /**
    * Returns the locally stored directed device/policy graph.
    *
    * @example
    * ```ts
-   * const graph = await sept.getDeviceGraph()
+   * const graph = await sept.getACL()
    * // [{
    * //   srcDeviceId: "dev_...",
    * //   dstDeviceId: "dev_...",
@@ -516,7 +512,7 @@ export class SeptClient {
    * // }]
    * ```
    */
-  getDeviceGraph: () => Promise<ACLItem[]>;
+  getACL(): Promise<ACLItem[]>;
 
   /**
    * Registers an application event handler.
@@ -543,11 +539,11 @@ export class SeptClient {
    * })
    * ```
    */
-  register: <TPayload = unknown, TResult = unknown>(
+  register<TPayload = unknown, TResult = unknown>(
     eventType: EventType,
     handler: SeptEventHandler<TPayload, TResult>,
     serial?: boolean,
-  ) => void;
+  ): void;
 
   /**
    * Registers an application handler that runs without blocking later event
@@ -560,26 +556,26 @@ export class SeptClient {
    * handlers run in the background, so their failures are recorded on the
    * stored event but are not propagated by {@link sync}.
    */
-  registerConcurrent: <TPayload = unknown, TResult = unknown>(
+  registerConcurrent<TPayload = unknown, TResult = unknown>(
     eventType: EventType,
     handler: SeptEventHandler<TPayload, TResult>,
-  ) => void;
+  ): void;
 
   /** Returns the local directed policy, if present. */
-  getPolicy: (
+  getPolicy(
     srcDeviceId: DeviceId,
     dstDeviceId: DeviceId,
-  ) => Promise<Policy | undefined>;
+  ): Promise<Policy | undefined>;
 
   /**
    * Returns whether a locally known device currently has role `admin`.
    *
    * May return `null` when the device is not locally known.
    */
-  isAdmin: (deviceId: DeviceId) => Promise<boolean | null>;
+  isAdmin(deviceId: DeviceId): Promise<boolean | null>;
 
   /** Returns whether the local device is currently an admin. */
-  isCurrentDeviceAdmin: () => Promise<boolean>;
+  isCurrentDeviceAdmin(): Promise<boolean>;
 
   /**
    * Returns whether `srcDeviceId` is locally authorized to send `eventType` to
@@ -589,11 +585,11 @@ export class SeptClient {
    * Admin devices currently return `true` without requiring an explicit edge
    * capability.
    */
-  checkPolicy: (
+  checkPolicy(
     srcDeviceId: DeviceId,
     dstDeviceId: DeviceId,
     eventType: EventType,
-  ) => Promise<boolean>;
+  ): Promise<boolean>;
 
   /**
    * Pulls pending events through REST and feeds them into the normal receive
@@ -605,7 +601,7 @@ export class SeptClient {
    * @param retry Whether failed synchronization should retry indefinitely.
    * @defaultValue `false`
    */
-  sync: (retry?: boolean) => Promise<void>;
+  sync(retry?: boolean): Promise<void>;
 
   /**
    * Queries locally stored events using the current store filtering DSL.
@@ -615,29 +611,29 @@ export class SeptClient {
    *
    * @see EventFilters
    */
-  getStoredEvents: <TPayload = unknown>(
+  getStoredEvents<TPayload = unknown>(
     filters?: EventFilters,
-  ) => Promise<StoredEvent<TPayload>[]>;
+  ): Promise<StoredEvent<TPayload>[]>;
 
   /**
    * Adds event types to a directed policy and distributes a policy update.
    */
-  grant: (
+  grant(
     srcDeviceId: DeviceId,
     dstDeviceId: DeviceId,
     eventTypes: EventType[],
     metadata?: Record<string, unknown>,
-  ) => Promise<void>;
+  ): Promise<void>;
 
   /**
    * Removes event types from a directed policy and distributes a policy update.
    */
-  revoke: (
+  revoke(
     srcDeviceId: DeviceId,
     dstDeviceId: DeviceId,
     eventTypes: EventType[],
     metadata?: Record<string, unknown>,
-  ) => Promise<void>;
+  ): Promise<void>;
 
   /**
    * Promotes a device to admin.
@@ -645,17 +641,17 @@ export class SeptClient {
    * Distributes `sept.admin.grant`, updates relay transport/admin state, and
    * sends current device/policy state to the promoted device.
    */
-  grantAdmin: (
+  grantAdmin(
     deviceId: DeviceId,
     metadata?: GrantAdminMetadata,
-  ) => Promise<void>;
+  ): Promise<void>;
 
   /**
    * Demotes an admin to a normal user.
    *
    * Distributes `sept.admin.revoke` and updates relay state.
    */
-  revokeAdmin: (deviceId: DeviceId) => Promise<void>;
+  revokeAdmin(deviceId: DeviceId): Promise<void>;
 
   /**
    * Returns namespaced persistent application storage.
@@ -673,13 +669,13 @@ export class SeptClient {
    * await store.delete("value")
    * ```
    */
-  appStorage: <T = unknown>(namespace: string) => AppStorage<T>;
+  appStorage<T = unknown>(namespace: string): AppStorage<T>;
 
   /** Resets the local SEPT database through the configured datastore adapter. */
-  resetDevice: () => Promise<void>;
+  resetDevice(): Promise<void>;
 
   /** Returns locally known non-revoked devices. */
-  getDevices: () => Promise<Device[]>;
+  getDevices(): Promise<Device[]>;
 
   /**
    * Invalidates a device.
@@ -687,8 +683,8 @@ export class SeptClient {
    * Distributes `sept.device.invalidate` to relevant peers/admins, updates relay
    * state and marks the device revoked locally.
    */
-  invalidateDevice: (deviceId: DeviceId) => Promise<void>;
+  invalidateDevice(deviceId: DeviceId): Promise<void>;
 
   /** Returns a simplified list of locally known admin devices. */
-  getAdmins: () => Promise<AdminDevice[]>;
+  getAdmins(): Promise<AdminDevice[]>;
 }

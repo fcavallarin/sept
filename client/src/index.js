@@ -152,6 +152,11 @@ export class SeptClient {
   }
 
   bootstrap = async () => {
+    console.warn("bootstrap() is deprecated, use createNetwork() instead")
+    return await this.createNetwork()
+  }
+
+  createNetwork = async () => {
     const networkStore = this.store.network;
     const networkId = await networkStore.create();
     let settings = await this.store.settings.get()

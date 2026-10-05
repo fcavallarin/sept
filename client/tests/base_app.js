@@ -73,8 +73,8 @@ export class BaseSeptApp {
   }
 
 
-  async bootstrap() {
-    return await this.septClient.bootstrap()
+  async createNetwork() {
+    return await this.septClient.createNetwork()
 
   };
 
@@ -122,8 +122,8 @@ export class BaseSeptApp {
     )
   };
 
-  async getDeviceGraph() {
-    return await this.septClient.getDeviceGraph()
+  async getACL() {
+    return await this.septClient.getACL()
   }
 
   async getDeviceId() {

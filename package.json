@@ -15,6 +15,7 @@
     "mkdocs": "typedoc client/src/index.d.ts --out docs/api"
   },
   "devDependencies": {
+    "better-sqlite3": "^13.0.3",
     "typedoc": "^0.28.20"
   }
 }
