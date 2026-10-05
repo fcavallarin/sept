@@ -1,4 +1,4 @@
-import { deserializeBin, SeptRequest, D1Adapter, now } from "@sept/core";
+import { deserializeBin, SeptRequest, D1Adapter, now } from "@sept-protocol/core";
 
 
 export function json(data, status = 200, extraHeaders = {}) {

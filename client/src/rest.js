@@ -1,5 +1,5 @@
-import { SeptRequest } from "@sept/core";
-import { deserializeBin } from '@sept/core';
+import { SeptRequest } from "@sept-protocol/core";
+import { deserializeBin } from '@sept-protocol/core';
 
 
 export class RestClient {

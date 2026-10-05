@@ -9,7 +9,7 @@
     "migrate": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
-    "@sept/server": "*"
+    "@sept-protocol/server": "*"
   },
   "devDependencies": {
     "wrangler": "^4.95.0"

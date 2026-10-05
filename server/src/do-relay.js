@@ -1,4 +1,4 @@
-import { randomBytes } from "@sept/crypto";
+import { randomBytes } from "@sept-protocol/crypto";
 import {
   deserializeBin,
   makeId,
@@ -6,7 +6,7 @@ import {
   now,
   isExpired,
   serializeEvent
-} from "@sept/core";
+} from "@sept-protocol/core";
 import { DurableObject } from "cloudflare:workers";
 
 export class DORelay extends DurableObject {

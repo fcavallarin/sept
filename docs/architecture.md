@@ -2,7 +2,7 @@
 
 SEPT separates **device trust and application authorization** from the relay used to transport events.
 
-The current JavaScript implementation is intentionally pragmatic: protocol logic, persistence and runtime orchestration live together in `@sept/client`. The project does not currently claim a formal `proto`/`sdk` package boundary; that boundary is expected to become clearer through interoperability and future ports.
+The current JavaScript implementation is intentionally pragmatic: protocol logic, persistence and runtime orchestration live together in `@sept-protocol/client`. The project does not currently claim a formal `proto`/`sdk` package boundary; that boundary is expected to become clearer through interoperability and future ports.
 
 ## Components
 
@@ -22,7 +22,7 @@ flowchart LR
   Relay -. optional / evolving .-> R2[(R2)]
 ```
 
-### `@sept/client`
+### `@sept-protocol/client`
 
 The client currently owns:
 
@@ -37,7 +37,7 @@ The client currently owns:
 - application event registration and dispatch;
 - a small namespaced application KV store.
 
-### `@sept/core`
+### `@sept-protocol/core`
 
 Cross-runtime primitives:
 
@@ -50,7 +50,7 @@ Cross-runtime primitives:
 - event bus;
 - async queue.
 
-### `@sept/crypto`
+### `@sept-protocol/crypto`
 
 Cryptographic primitives used by client/server:
 
@@ -61,7 +61,7 @@ Cryptographic primitives used by client/server:
 - SHA-256 hashing;
 - secure random values.
 
-### `@sept/server`
+### `@sept-protocol/server`
 
 The server package provides the reference relay implementation:
 
@@ -76,7 +76,7 @@ The server package provides the reference relay implementation:
 
 ### Cloudflare server template
 
-`server/templates/cloudflare` is the standalone deployment template for `@sept/server`. It wires D1, Durable Objects and R2 through Wrangler and can be scaffolded into any target directory. The generated project is an independent application that consumes `@sept/server` as a normal npm dependency.
+`server/templates/cloudflare` is the standalone deployment template for `@sept-protocol/server`. It wires D1, Durable Objects and R2 through Wrangler and can be scaffolded into any target directory. The generated project is an independent application that consumes `@sept-protocol/server` as a normal npm dependency.
 
 ## Trust boundaries
 

@@ -1,16 +1,16 @@
 # SEPT JavaScript quick start
 
-This guide shows direct `@sept/client` usage in an application.
+This guide shows direct `@sept-protocol/client` usage in an application.
 
 ## Install
 
 Install the client package in your application:
 
 ```bash
-npm install @sept/client
+npm install @sept-protocol/client
 ```
 
-`@sept/client` brings in the SEPT core and crypto packages it requires.
+`@sept-protocol/client` brings in the SEPT core and crypto packages it requires.
 
 `SeptClient` also requires a supported SQLite datastore adapter configuration and a SEPT relay endpoint.
 
@@ -27,7 +27,7 @@ If you are developing SEPT itself from this repository, use `npm install` at the
 A client is constructed with `SeptClient.create()`:
 
 ```js
-import { SeptClient } from "@sept/client"
+import { SeptClient } from "@sept-protocol/client"
 import Database from "better-sqlite3"
 
 const sept = await SeptClient.create({

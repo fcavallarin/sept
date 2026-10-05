@@ -3,9 +3,9 @@ import {
   randomBytes,
   encryptSymmetric,
   decryptSymmetric
-} from '@sept/crypto';
+} from '@sept-protocol/crypto';
 
-import { deserializeBin, makeId, serializeBin, serializeEvent } from '@sept/core';
+import { deserializeBin, makeId, serializeBin, serializeEvent } from '@sept-protocol/core';
 
 
 export class RecipientStore extends BaseStore {

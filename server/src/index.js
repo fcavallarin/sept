@@ -4,7 +4,7 @@ import { addDevice, createPairing, getPairing, getPairedDevice, deletePairedDevi
 import { createEvent, listEvents, ackEvents } from './routes/event.js';
 import { relayConnect, relayGetTicket } from './routes/relay.js';
 import { DORelay } from "./do-relay.js";
-import { EventBus } from '@sept/core'
+import { EventBus } from '@sept-protocol/core'
 import { getAuth, httpError, readJson, cleanupExpiredNonces } from './lib/http.js';
 const jsonResponse = json
 export { DORelay, jsonResponse, getAuth, httpError, readJson };

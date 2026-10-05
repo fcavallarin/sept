@@ -6,7 +6,7 @@ SEPT is still pre-1.0. Unless a document explicitly says otherwise, these files 
 
 ## Start here
 
-1. [JavaScript quick start](sept-quickstart.md) — use `@sept/client` directly.
+1. [JavaScript quick start](sept-quickstart.md) — use `@sept-protocol/client` directly.
 2. [Architecture](architecture.md) — understand component and trust boundaries.
 3. [Protocol](protocol.md) — event, pairing and synchronization flow.
 4. [Authorization](authorization.md) — local default-deny policies and admin events.

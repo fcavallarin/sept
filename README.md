@@ -66,16 +66,16 @@ SEPT is not a VPN, overlay network, chat protocol, remote-shell protocol, or app
 ## Repository layout
 
 ```text
-client/   @sept/client  — client runtime, pairing, policies, persistence, sync and WS lifecycle
-core/     @sept/core    — canonical JSON, serialization, IDs, queues, event bus and SQL helpers
-crypto/   @sept/crypto  — signing, hashing and encryption primitives
-server/   @sept/server  — relay routes, request authentication and Durable Object relay
+client/   @sept-protocol/client  — client runtime, pairing, policies, persistence, sync and WS lifecycle
+core/     @sept-protocol/core    — canonical JSON, serialization, IDs, queues, event bus and SQL helpers
+crypto/   @sept-protocol/crypto  — signing, hashing and encryption primitives
+server/   @sept-protocol/server  — relay routes, request authentication and Durable Object relay
   templates/cloudflare/ — standalone Cloudflare relay template
 docs/                    — architecture, protocol, security and API documentation
 scripts/                 — development utilities and server scaffolding
 ```
 
-The repository is an npm workspace so the SEPT packages can be developed and tested together. Applications consuming SEPT are expected to live independently and depend on the published `@sept/*` packages.
+The repository is an npm workspace so the SEPT packages can be developed and tested together. Applications consuming SEPT are expected to live independently and depend on the published `@sept-protocol/*` packages.
 
 ## Install for development
 
@@ -94,14 +94,14 @@ npm test
 For application development, install the package you need directly from npm, for example:
 
 ```bash
-npm install @sept/client
+npm install @sept-protocol/client
 ```
 
 See [JavaScript quick start](docs/sept-quickstart.md) for client setup.
 
 ## Create a self-hosted relay
 
-The repository includes a Cloudflare server template. Choose any target directory; the generated project is standalone and depends on `@sept/server` as a normal npm package.
+The repository includes a Cloudflare server template. Choose any target directory; the generated project is standalone and depends on `@sept-protocol/server` as a normal npm package.
 
 ```bash
 npm run scaffold:server -- my-sept ../my-sept-server

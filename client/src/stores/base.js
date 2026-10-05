@@ -3,9 +3,9 @@ import {
   randomBytes,
   encryptSymmetric,
   decryptSymmetric
-} from '@sept/crypto';
+} from '@sept-protocol/crypto';
 
-import { deserializeBin, makeId, serializeBin, makeIdFromStr, serializeEvent } from '@sept/core';
+import { deserializeBin, makeId, serializeBin, makeIdFromStr, serializeEvent } from '@sept-protocol/core';
 
 
 export async function resetDb(db) {

@@ -1,4 +1,4 @@
-# `@sept/core`
+# `@sept-protocol/core`
 
 Small cross-runtime primitives shared by SEPT client/server packages.
 

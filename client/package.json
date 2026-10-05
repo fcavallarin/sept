@@ -1,5 +1,5 @@
 {
-  "name": "@sept/client",
+  "name": "@sept-protocol/client",
   "description": "Cross-runtime client implementation for the SEPT protocol",
   "license": "MIT",
   "repository": {
@@ -26,8 +26,8 @@
     "src"
   ],
   "dependencies": {
-    "@sept/crypto": "^0.1.0",
-    "@sept/core": "^0.1.0"
+    "@sept-protocol/crypto": "^0.1.0",
+    "@sept-protocol/core": "^0.1.0"
   },
   "publishConfig": {
     "access": "public"

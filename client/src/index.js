@@ -13,7 +13,7 @@ import {
   encryptAsymmetric,
   decryptAsymmetric,
   verifyString
-} from '@sept/crypto';
+} from '@sept-protocol/crypto';
 
 
 import {
@@ -28,7 +28,7 @@ import {
   AsyncQueue,
   now,
   makeIdFromStr
-} from '@sept/core';
+} from '@sept-protocol/core';
 
 import {
   SettingsStore,

@@ -1,5 +1,5 @@
 /**
- * Public API for `@sept/client`.
+ * Public API for `@sept-protocol/client`.
  *
  * The runtime implementation is plain JavaScript. These declarations document
  * the public client surface and its current behavior; methods prefixed with `_`

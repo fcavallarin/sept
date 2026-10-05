@@ -1,5 +1,5 @@
 import { serializeBin, utf8Encode } from './serialization.js'
-import { sha256 } from "@sept/crypto"
+import { sha256 } from "@sept-protocol/crypto"
 
 
 export function makeId(prefix, hashBytes, length = 32) {

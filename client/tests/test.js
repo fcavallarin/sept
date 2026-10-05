@@ -1,4 +1,4 @@
-import { canonicalJson } from "@sept/core";
+import { canonicalJson } from "@sept-protocol/core";
 import { BaseSeptApp } from "./base_app.js";
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

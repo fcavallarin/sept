@@ -1,5 +1,5 @@
 {
-  "name": "@sept/crypto",
+  "name": "@sept-protocol/crypto",
   "description": "Cryptographic primitives and utilities for the SEPT protocol",
   "license": "MIT",
   "repository": {

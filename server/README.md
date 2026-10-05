@@ -1,4 +1,4 @@
-# `@sept/server`
+# `@sept-protocol/server`
 
 Reference SEPT relay/server package for Cloudflare Workers.
 
@@ -7,7 +7,7 @@ The server is intentionally not the application authorization authority. It auth
 ## Exported server composition
 
 ```js
-import { createSeptServer } from "@sept/server"
+import { createSeptServer } from "@sept-protocol/server"
 ```
 
 `createSeptServer(plugins, options)` returns a Worker-compatible object with `fetch()` and allows deployment code to add custom routes and install server hooks.

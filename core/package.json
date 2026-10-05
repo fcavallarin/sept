@@ -1,5 +1,5 @@
 {
-  "name": "@sept/core",
+  "name": "@sept-protocol/core",
   "description": "Core protocol types, validation, and event handling for SEPT",
   "license": "MIT",
   "repository": {
@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "canonicalize": "^3.0.0",
-    "@sept/crypto": "^0.1.0"
+    "@sept-protocol/crypto": "^0.1.0"
   },
   "files": [
     "src"

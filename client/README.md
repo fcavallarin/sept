@@ -1,4 +1,4 @@
-# `@sept/client`
+# `@sept-protocol/client`
 
 Cross-runtime SEPT client implementation.
 
@@ -21,7 +21,7 @@ The project intentionally has not frozen a separate `proto` vs `sdk` package bou
 ## Usage
 
 ```js
-import { SeptClient } from "@sept/client"
+import { SeptClient } from "@sept-protocol/client"
 
 const sept = await SeptClient.create({
   restEndpoint: "http://localhost:8787",

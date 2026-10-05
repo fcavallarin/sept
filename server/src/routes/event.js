@@ -1,7 +1,7 @@
 import { getAuth, httpError, json, readJson } from '../lib/http.js';
-import { deserializeBin, serializeEvent } from '@sept/core';
-import { verifyString } from '@sept/crypto';
-import { D1Adapter, now } from '@sept/core';
+import { deserializeBin, serializeEvent } from '@sept-protocol/core';
+import { verifyString } from '@sept-protocolcrypto';
+import { D1Adapter, now } from '@sept-protocol/core';
 
 
 export async function createEvent(request, env, params, ctx) {

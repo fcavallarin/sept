@@ -1,4 +1,4 @@
-import { sha256String, signString, verifyString, randomBytes } from '@sept/crypto';
+import { sha256String, signString, verifyString, randomBytes } from '@sept-protocol/crypto';
 import { deserializeBin, serializeBin } from './serialization.js';
 import { canonicalJson } from './canonical-json.js';
 

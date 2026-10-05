@@ -1,4 +1,4 @@
-import { deserializeBin } from '@sept/core';
+import { deserializeBin } from '@sept-protocol/core';
 import { BaseEventHandler } from './base.js'
 
 export class AdminHandler extends BaseEventHandler {

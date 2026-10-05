@@ -2,11 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { SeptClient } from '@sept/client';
+import { SeptClient } from '@sept-protocol/client';
 import Database from 'better-sqlite3';
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { deserializeBin, serializeBin } from '@sept/core';
+import { deserializeBin, serializeBin } from '@sept-protocol/core';
 import { randomBytes } from 'node:crypto';
 
 export function readJsonFile(path) {

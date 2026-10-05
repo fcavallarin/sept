@@ -1,5 +1,5 @@
 import { httpError, json, readJson } from '../lib/http.js';
-import { D1Adapter, now } from '@sept/core';
+import { D1Adapter, now } from '@sept-protocol/core';
 
 export async function bootstrap(request, env, params, ctx) {
 

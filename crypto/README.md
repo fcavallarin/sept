@@ -1,4 +1,4 @@
-# `@sept/crypto`
+# `@sept-protocol/crypto`
 
 Cryptographic primitives used by SEPT.
 

@@ -1,8 +1,8 @@
 # Self-hosting the SEPT relay
 
-SEPT includes a generic Cloudflare deployment template for self-hosting `@sept/server`.
+SEPT includes a generic Cloudflare deployment template for self-hosting `@sept-protocol/server`.
 
-The scaffold command creates a **standalone project in a directory chosen by you**. The generated server is not a workspace inside the SEPT repository and consumes `@sept/server` as a normal npm dependency.
+The scaffold command creates a **standalone project in a directory chosen by you**. The generated server is not a workspace inside the SEPT repository and consumes `@sept-protocol/server` as a normal npm dependency.
 
 ## Requirements
 
@@ -46,7 +46,7 @@ my-sept-server/
 └── wrangler.jsonc
 ```
 
-Its `package.json` depends on `@sept/server`, so the generated project can be moved, versioned and deployed independently.
+Its `package.json` depends on `@sept-protocol/server`, so the generated project can be moved, versioned and deployed independently.
 
 ### Create and deploy the server
 
@@ -75,7 +75,7 @@ The generic scaffold currently expects:
 | `RELAY` | Durable Object | live WebSocket delivery per SEPT network |
 | `STORAGE` | R2 | configured server bucket; storage usage is evolving |
 
-The Worker enables the `nodejs_compat` compatibility flag and exports `DORelay` from `@sept/server`.
+The Worker enables the `nodejs_compat` compatibility flag and exports `DORelay` from `@sept-protocol/server`.
 
 ### Durable Object configuration
 
@@ -150,9 +150,9 @@ const sept = await SeptClient.create({
 The generated server starts with a minimal SEPT composition:
 
 ```js
-import { createSeptServer } from "@sept/server"
+import { createSeptServer } from "@sept-protocol/server"
 
-export { DORelay } from "@sept/server"
+export { DORelay } from "@sept-protocol/server"
 
 export default createSeptServer([], {
   maxNetworks: 1
@@ -179,7 +179,7 @@ Because bootstrap is intentionally unauthenticated, `maxNetworks` also acts as a
 
 ## Current relay routes
 
-The core `@sept/server` currently provides:
+The core `@sept-protocol/server` currently provides:
 
 ```text
 POST   /bootstrap
@@ -249,7 +249,7 @@ import {
   httpError,
   jsonResponse,
   readJson,
-} from "@sept/server"
+} from "@sept-protocol/server"
 
 async function handler(request, env, params) {
   const body = await readJson(request)

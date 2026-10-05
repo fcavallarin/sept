@@ -1,5 +1,5 @@
-import { canonicalJson, deserializeBin, now } from "@sept/core";
-import { verifyString } from "@sept/crypto";
+import { canonicalJson, deserializeBin, now } from "@sept-protocol/core";
+import { verifyString } from "@sept-protocol/crypto";
 import { BaseEventHandler } from './base.js'
 
 export class DeviceHandler extends BaseEventHandler {
