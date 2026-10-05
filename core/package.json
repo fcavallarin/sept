@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "canonicalize": "^3.0.0",
-    "@sept-protocol/crypto": "^0.1.1"
+    "@sept-protocol/crypto": "0.1.1"
   },
   "files": [
     "src"
