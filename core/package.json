@@ -1,5 +1,16 @@
 {
   "name": "@sept/core",
+  "description": "Core protocol types, validation, and event handling for SEPT",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fcavallarin/sept.git",
+    "directory": "core"
+  },
+  "homepage": "https://github.com/fcavallarin/sept",
+  "bugs": {
+    "url": "https://github.com/fcavallarin/sept/issues"
+  },
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.js",
@@ -8,9 +19,12 @@
   },
   "dependencies": {
     "canonicalize": "^3.0.0",
-    "@sept/crypto": "*"
+    "@sept/crypto": "^0.1.0"
   },
   "files": [
     "src"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

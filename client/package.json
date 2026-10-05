@@ -1,5 +1,16 @@
 {
   "name": "@sept/client",
+  "description": "Cross-runtime client implementation for the SEPT protocol",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fcavallarin/sept.git",
+    "directory": "client"
+  },
+  "homepage": "https://github.com/fcavallarin/sept",
+  "bugs": {
+    "url": "https://github.com/fcavallarin/sept/issues"
+  },
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.js",
@@ -15,7 +26,10 @@
     "src"
   ],
   "dependencies": {
-    "@sept/crypto": "*",
-    "@sept/core": "*"
+    "@sept/crypto": "^0.1.0",
+    "@sept/core": "^0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
