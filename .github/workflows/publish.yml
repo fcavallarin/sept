@@ -1,0 +1,47 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - run: npm ci
+
+      - name: Verify release version
+        run: |
+          node -e '
+            const fs = require("fs");
+            const version = process.env.GITHUB_REF_NAME.replace(/^v/, "");
+            for (const dir of ["crypto", "core", "client", "server"]) {
+              const pkg = JSON.parse(fs.readFileSync(`${dir}/package.json`));
+              if (pkg.version !== version) {
+                console.error(`${pkg.name}: ${pkg.version} != ${version}`);
+                process.exit(1);
+              }
+            }
+            console.log(`Release version: ${version}`);
+          '
+
+      - run: npm test
+
+      - run: npm publish --workspace=@sept-protocol/crypto
+      - run: npm publish --workspace=@sept-protocol/core
+      - run: npm publish --workspace=@sept-protocol/client
+      - run: npm publish --workspace=@sept-protocol/server
