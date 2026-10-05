@@ -41,12 +41,13 @@ export class BaseSeptApp {
     this.clientName = clientName;
   }
 
-  async init(dataDir) {
+  async init(dataDir, serverUrl) {
 
     const fmDbPath = path.resolve(dataDir, `fm-${this.clientName}.db`);
 
     this.septClient = await SeptClient.create({
       secretKeyProvider: async () => deserializeBin(`oZDipiLZnJq-SAR2Qwde7D-fkWmM3OaLi9N18WubdOU`),
+      restEndpoint: serverUrl,
       dataStore: {
         type: "better-sqlite",
         open: () => openDb(fmDbPath),
@@ -65,9 +66,9 @@ export class BaseSeptApp {
       }
     )
   }
-  static async create(clientName, dataDir) {
-    const i = new this(clientName);
-    await i.init(dataDir)
+  static async create(clientName, dataDir, serverUrl) {
+    const i = new this(clientName)
+    await i.init(dataDir, serverUrl)
     return i;
 
   }

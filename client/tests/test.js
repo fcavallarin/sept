@@ -2,13 +2,16 @@ import { canonicalJson } from "@sept-protocol/core";
 import { BaseSeptApp } from "./base_app.js";
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rm, mkdir } from 'node:fs/promises';
+import { rm, mkdir, cp } from 'node:fs/promises';
+import { execFileSync, spawn } from "node:child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const SERVER_PORT = 18787
 const NUM_DEVICES = 4
-
+let server
+const serverOutput = []
 function assert(cond, err) {
   if (!cond) {
     throw new Error(err)
@@ -22,11 +25,54 @@ async function sleep(ms) {
 class SeptTest {
   async init() {
     const dataDir = path.resolve(__dirname, "data")
+    const serverDir = path.resolve(dataDir, "test-server")
     await rm(dataDir, { recursive: true, force: true });
     await mkdir(dataDir, { recursive: true });
-    this.appAdmin = await BaseSeptApp.create("admin", dataDir)
+
+    execFileSync(
+      "npm",
+      ["run", "scaffold:server", "--", "test", serverDir],
+      { stdio: "inherit", cwd: path.resolve(__dirname, "..", "..") }
+    )
+    execFileSync(
+      "npm", ["install"],
+      { stdio: "inherit", cwd: serverDir }
+    )
+    const wranglerConf = path.resolve(serverDir, "wrangler.jsonc")
+    await cp(path.resolve(__dirname, "wrangler.jsonc"), wranglerConf)
+
+    execFileSync(
+      "npx", ["wrangler", "d1", "migrations", "apply", "DB", "--local"],
+      { stdio: ["ignore", "pipe", "pipe"], cwd: serverDir }
+    )
+    server = spawn(
+      "npx",
+      ["wrangler", "dev", "--config", wranglerConf, "--port", SERVER_PORT],
+      {
+        cwd: serverDir,
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    );
+    server.stdout.on("data", data => {
+      serverOutput.push(data.toString());
+    });
+
+    server.stderr.on("data", data => {
+      serverOutput.push(data.toString());
+    });
+
+    const serverUrl = `http://127.0.0.1:${SERVER_PORT}`
+    this.appAdmin = await BaseSeptApp.create("admin", dataDir, serverUrl)
     for (let i = 1; i <= NUM_DEVICES; i++) {
-      this[`appDevice${i}`] = await BaseSeptApp.create(`device${i}`, dataDir)
+      this[`appDevice${i}`] = await BaseSeptApp.create(`device${i}`, dataDir, serverUrl)
+    }
+    while(true){
+      for(const o of serverOutput){
+        if(o.startsWith(`[wrangler:info] Ready on`)){
+          return
+        }
+      }
+      await sleep(300)
     }
   }
 
@@ -41,11 +87,9 @@ class SeptTest {
     console.log(`Bootstrap done`)
 
     for (let i = 1; i <= NUM_DEVICES - 1; i++) {
-      // let dPaired
-      // const dP = new Promise(resolve => dPaired = resolve)
       const deviceData = await this[`appDevice${i}`].initDevice()
       console.log(`Init device${i} done`)
-      const { pin, pairing } = await this.appAdmin.addDevice(deviceData, {} /*, dPaired*/)
+      const { pin, pairing } = await this.appAdmin.addDevice(deviceData)
       console.log(`Device${i} added`)
       await this[`appDevice${i}`].pairDevice(pin)
       await this[`appDevice${i}`].sync()
@@ -54,11 +98,9 @@ class SeptTest {
     }
 
     const i = NUM_DEVICES
-    // let dPaired
-    // const dP = new Promise(resolve => dPaired = resolve)
     const deviceData = await this[`appDevice${i}`].initDevice()
     console.log(`Init device${i} done`)
-    const { pin, pairing:pairingErr } = await this.appAdmin.addDevice(deviceData, {}/*, dPaired*/)
+    const { pin, pairing: pairingErr } = await this.appAdmin.addDevice(deviceData)
     console.log(`Device${i} added`)
     let failed = false
     const wrongPin = String(
@@ -78,7 +120,7 @@ class SeptTest {
     }
     assert(failed, "getPairing should fail with an invalidated pairing session ..")
     failed = false
-    try{
+    try {
       await pairingErr
     } catch {
       failed = true
@@ -514,14 +556,28 @@ async function main() {
   await septTest.init()
   const tests = Object.getOwnPropertyNames(SeptTest.prototype)
     .filter(t => t.startsWith("test_"))
-  //.sort((a,b) => Number(a.split("_")[1]) - Number(b.split("_")[1]))
 
+  const errors = []
   for (const t of tests) {
     console.log(`Running ${t}`)
-    await septTest[t](t)
-    console.log(`${t} ... OK`)
+    try {
+      await septTest[t](t)
+      console.log(`${t} ... OK`)
+    } catch (e) {
+      errors.push(`${t}: ${e}`)
+      console.log(`${t} ... ERROR`)
+    }
     console.log("---------------")
   }
+  server.kill()
+  if (errors.length > 0) {
+    for (const e of errors) {
+      console.log(e)
+    }
+    process.exit(1)
+  }
+  console.log("ALL TESTS PASSED")
+
 }
 
 main()
