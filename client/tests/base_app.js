@@ -43,7 +43,7 @@ export class BaseSeptApp {
 
   async init(dataDir, serverUrl) {
 
-    const fmDbPath = path.resolve(dataDir, `fm-${this.clientName}.db`);
+    const fmDbPath = path.resolve(dataDir, `sept-${this.clientName}.db`);
 
     this.septClient = await SeptClient.create({
       secretKeyProvider: async () => deserializeBin(`oZDipiLZnJq-SAR2Qwde7D-fkWmM3OaLi9N18WubdOU`),

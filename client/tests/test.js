@@ -12,6 +12,7 @@ const SERVER_PORT = 18787
 const NUM_DEVICES = 4
 let server
 const serverOutput = []
+
 function assert(cond, err) {
   if (!cond) {
     throw new Error(err)
@@ -53,13 +54,14 @@ class SeptTest {
         stdio: ["ignore", "pipe", "pipe"],
       }
     );
+  
     server.stdout.on("data", data => {
       serverOutput.push(data.toString());
-    });
+    })
 
     server.stderr.on("data", data => {
       serverOutput.push(data.toString());
-    });
+    })
 
     const serverUrl = `http://127.0.0.1:${SERVER_PORT}`
     this.appAdmin = await BaseSeptApp.create("admin", dataDir, serverUrl)
@@ -577,7 +579,6 @@ async function main() {
     process.exit(1)
   }
   console.log("ALL TESTS PASSED")
-
 }
 
 main()

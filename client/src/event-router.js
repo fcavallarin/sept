@@ -16,7 +16,6 @@ export class EventRouter {
       device: DeviceHandler,
     };
     const handler = handlers[hname];
-    // console.log("--->", type, body)
     const h = new handler(this.uiEvents, this.store, evType.join("."), body);
     await h.handle();
   }

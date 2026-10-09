@@ -6,7 +6,7 @@ export class RestClient {
   constructor(deviceId, signKey, restEndpoint) {
     this.deviceId = deviceId
     this.signKey = deserializeBin(signKey);
-    this.restEndpoint = restEndpoint || "http://localhost:8787";
+    this.restEndpoint = restEndpoint.replace(/\/+$/, "") || "http://localhost:8787";
   }
 
   async call(path, options = {}) {
