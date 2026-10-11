@@ -30,6 +30,10 @@ export async function createEvent(request, env, params, ctx) {
     throw httpError(404, 'unauthorized: signature verification failed');
   }
 
+  if (timestamp > now() + 2) {
+    throw httpError(400, 'timestamp is in the future');
+  }
+
   const { results } = await db.write(
     `UPDATE counter
     SET value = value + 1
@@ -85,7 +89,7 @@ export async function createEvent(request, env, params, ctx) {
     });
     rcptCnt++
   }
-  if(rcptCnt === 0){
+  if (rcptCnt === 0) {
     await db.write(`DELETE FROM event WHERE id=?`, [eventId]);
   }
   return json({

@@ -5,9 +5,16 @@ import {
   decryptSymmetric
 } from '@sept-protocol/crypto';
 
-import { deserializeBin, makeId, serializeBin, makeIdFromStr, serializeEvent, AsyncQueue, } from '@sept-protocol/core';
+import {
+  deserializeBin,
+  makeId,
+  serializeBin,
+  makeIdFromStr,
+  serializeEvent,
+  AsyncQueue
+} from '@sept-protocol/core';
 
-  
+
 export class AppKVStore extends BaseStore {
   static create(dbAdapter) {
     const i = super.create(dbAdapter, "app_kv_store");

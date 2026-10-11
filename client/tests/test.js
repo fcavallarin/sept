@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rm, mkdir, cp } from 'node:fs/promises';
 import { execFileSync, spawn } from "node:child_process";
+import fs from "node:fs"
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +36,12 @@ class SeptTest {
       ["run", "scaffold:server", "--", "test", serverDir],
       { stdio: "inherit", cwd: path.resolve(__dirname, "..", "..") }
     )
+
+    const packageJson = path.resolve(serverDir, "package.json")
+    const packageJsonCont = JSON.parse(fs.readFileSync(packageJson, "utf-8"))
+    packageJsonCont.dependencies['@sept-protocol/server'] = "../../../server"
+    fs.writeFileSync(packageJson, JSON.stringify(packageJsonCont), "utf-8")
+
     execFileSync(
       "npm", ["install"],
       { stdio: "inherit", cwd: serverDir }
