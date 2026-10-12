@@ -74,7 +74,10 @@ export async function getAuth(env, request, body) {
     throw httpError(400, "Missing SEPT headers")
   }
   const db = new D1Adapter(() => env.DB)
-  const device = await db.readOne(`SELECT * from device where id = ?`, [deviceId])
+  const device = await db.readOne(
+    `SELECT * from device where id = ? AND revoked_at IS NULL`,
+    [deviceId]
+  )
   const nonceSeen = async (deviceId, nonce) => {
     const ts = now();
     try {
