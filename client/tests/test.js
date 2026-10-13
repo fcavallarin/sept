@@ -61,7 +61,7 @@ class SeptTest {
         stdio: ["ignore", "pipe", "pipe"],
       }
     );
-  
+
     server.stdout.on("data", data => {
       serverOutput.push(data.toString());
     })
@@ -75,14 +75,17 @@ class SeptTest {
     for (let i = 1; i <= NUM_DEVICES; i++) {
       this[`appDevice${i}`] = await BaseSeptApp.create(`device${i}`, dataDir, serverUrl)
     }
-    while(true){
-      for(const o of serverOutput){
-        if(o.startsWith(`[wrangler:info] Ready on`)){
+
+    let cnt = 60 * 2
+    while (cnt-- > 0) {
+      for (const o of serverOutput) {
+        if (o.startsWith(`[wrangler:info] Ready on`)) {
           return
         }
       }
-      await sleep(300)
+      await sleep(500)
     }
+    throw new Error("Timeout starting wrangler")
   }
 
   async _sync_client_devices(exclude = []) {
@@ -586,7 +589,10 @@ async function main() {
     process.exit(1)
   }
   console.log("ALL TESTS PASSED")
+  process.exit(0)
 }
 
-main()
-
+main().catch(err => {
+  console.error(err)
+  process.exit(1)
+})
