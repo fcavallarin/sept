@@ -45,8 +45,6 @@ import {
 import { EventRouter } from './event-router.js';
 
 
-
-
 export class SeptClient {
 
   constructor(options) {
@@ -471,7 +469,16 @@ export class SeptClient {
     return deviceData;
   };
 
-  async _addEvent(networkId, eventId, payloadType, senderDeviceId, dstDeviceIds, payload, payloadKey, sequence, timestamp) {
+  async _addEvent(networkId,
+    eventId,
+    payloadType,
+    senderDeviceId,
+    dstDeviceIds,
+    payload,
+    payloadKey,
+    sequence,
+    timestamp,
+  ) {
     const isOutgoing = Boolean(dstDeviceIds)
     const isIncoming = !isOutgoing
 
@@ -487,7 +494,7 @@ export class SeptClient {
       this.systemEventTypes.includes(payloadType),
       isOutgoing,
       isIncoming,
-      timestamp
+      timestamp,
     )
   }
 
@@ -500,59 +507,63 @@ export class SeptClient {
 
     for (const event of events) {
       const { eventId } = event
-
-      const senderDevice = await this.store.device.get(
-        event.senderDeviceId
-      )
-
-      if (!senderDevice) {
-        throw new Error(`Unauthorized device: ${event.senderDeviceId}`)
-      }
-
-      const verified = await verifyString(
-        senderDevice.signPublicKey,
-        deserializeBin(event.signature),
-        serializeEvent(
-          networkId,
-          eventId,
-          [],
-          event.senderDeviceId,
-          event.encryptedPayload,
-          event.timestamp
+      let eventPayload, policyOk, payloadKey
+      try {
+        const senderDevice = await this.store.device.get(
+          event.senderDeviceId
         )
-      )
 
-      if (!verified) {
-        throw new Error("Signature verification failed")
+        if (!senderDevice) {
+          throw new Error(`Unauthorized device: ${event.senderDeviceId}`)
+        }
+
+        const verified = await verifyString(
+          senderDevice.signPublicKey,
+          deserializeBin(event.signature),
+          serializeEvent(
+            networkId,
+            eventId,
+            [],
+            event.senderDeviceId,
+            event.encryptedPayload,
+            event.timestamp
+          )
+        )
+
+        if (!verified) {
+          throw new Error("Signature verification failed")
+        }
+
+        payloadKey = decryptPayloadKey(
+          deserializeBin(settings.deviceCryptPrivateKey),
+          senderDevice.cryptPublicKey,
+          deserializeBin(event.encryptedPayloadKey)
+        )
+
+        const decryptedPayload = decryptWithPayloadKey(
+          payloadKey,
+          deserializeBin(event.encryptedPayload)
+        )
+
+        eventPayload = JSON.parse(
+          new TextDecoder().decode(decryptedPayload)
+        )
+
+        policyOk = await this.checkPolicy(
+          event.senderDeviceId,
+          deviceId,
+          eventPayload.type
+        )
+      } catch (err) {
+        ackEvents.push(eventId)
+        continue
       }
-
-      const payloadKey = decryptPayloadKey(
-        deserializeBin(settings.deviceCryptPrivateKey),
-        senderDevice.cryptPublicKey,
-        deserializeBin(event.encryptedPayloadKey)
-      )
-
-      const decryptedPayload = decryptWithPayloadKey(
-        payloadKey,
-        deserializeBin(event.encryptedPayload)
-      )
-
-      const eventPayload = JSON.parse(
-        new TextDecoder().decode(decryptedPayload)
-      )
-
-      const policyOk = await this.checkPolicy(
-        event.senderDeviceId,
-        deviceId,
-        eventPayload.type
-      )
 
       if (!policyOk) {
         console.log(
           `sync(): Device ${event.senderDeviceId} not allowed ` +
           `to perform '${eventPayload.type}' to ${deviceId}`
         )
-
         ackEvents.push(eventId)
         continue
       }
@@ -581,7 +592,7 @@ export class SeptClient {
         eventPayload.payload,
         payloadKey,
         event.sequence,
-        event.timestamp
+        event.timestamp,
       )
 
       ackEvents.push(eventId)

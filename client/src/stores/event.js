@@ -125,12 +125,33 @@ export class EventStore extends BaseStore {
     await this.db.write(`UPDATE event set sequence = ? where id = ?`, [sequence, eventId])
   }
 
-  async add(networkId, type, recipients, senderDeviceId, payload, payloadKey, id, sequence, isSystem, isOutgoing, isIncoming, ts) {
+  async add(networkId,
+    type,
+    recipients,
+    senderDeviceId,
+    payload,
+    payloadKey,
+    id,
+    sequence,
+    isSystem,
+    isOutgoing,
+    isIncoming,
+    ts,
+  ) {
     if (!id) {
       throw new Error("Missing event id")
     }
     const { fields, values, placeholders } = this.getQryParts({
-      id, type, senderDeviceId, payload, payloadKey, sequence, isSystem, isOutgoing, isIncoming, timestamp: ts
+      id,
+      type,
+      senderDeviceId,
+      payload,
+      payloadKey,
+      sequence,
+      isSystem,
+      isOutgoing,
+      isIncoming,
+      timestamp: ts,
     })
     // @TODO: Transaction here!!
     await this.db.write(
