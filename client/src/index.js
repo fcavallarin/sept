@@ -73,6 +73,7 @@ export class SeptClient {
 
     this.uiEvents = new EventBus([
       ...this.systemEventTypes,
+      "system.failure",
       "connection.open",
       "connection.close",
       "connection.error",
@@ -212,6 +213,9 @@ export class SeptClient {
   }
 
   send = async (type, payload, dstDeviceIds) => {
+    if (await this.getSystemFailure()) {
+      throw new Error("SEPT system failure: a system event could not be applied, contact an admin")
+    }
     const eventStore = this.store.event
     const deviceStore = this.store.device
     const deviceData = await this._getDeviceData();
@@ -506,6 +510,12 @@ export class SeptClient {
     const ackEvents = []
 
     for (const event of events) {
+      // Process what was stored so far before receiving the next event: its
+      // authorization must reflect the state produced by earlier events.
+      if (!await this._processPending(eventRouter)) {
+        break
+      }
+
       const { eventId } = event
       let eventPayload, policyOk, payloadKey
       try {
@@ -599,6 +609,15 @@ export class SeptClient {
     }
 
     await this._ackEvents(ackEvents)
+    await this._processPending(eventRouter)
+  }
+
+  // Processes stored events still pending, in sequence order. Returns false
+  // if processing must stop: a system event failed (now or earlier).
+  async _processPending(eventRouter) {
+    if (await this.getSystemFailure()) {
+      return false
+    }
 
     const unprocessed = (
       await this.store.event.filter({
@@ -632,8 +651,8 @@ export class SeptClient {
             handlerFailed: true,
           })
 
-          // processedAt remains null, so it will be retried.
-          throw error
+          await this._systemFailure(event, error)
+          return false
         }
 
         continue
@@ -674,7 +693,12 @@ export class SeptClient {
       };
 
       if (registration.serial) {
-        await runHandler()
+        try {
+          await runHandler()
+        } catch (error) {
+          // Recorded on the event; must not stop processing.
+          console.error(`Event handler error for ${event.id}:`, error)
+        }
       } else {
         void runHandler().catch((error) => {
           console.error(
@@ -684,6 +708,30 @@ export class SeptClient {
         })
       }
     }
+
+    return true
+  }
+
+  // A system event could not be applied: local protocol state no longer
+  // matches the network's. Stop everything (persisted across restarts):
+  // nothing else is downloaded, ACKed, processed or sent.
+  async _systemFailure(event, error) {
+    const failure = {
+      eventId: event.id,
+      type: event.type,
+      senderDeviceId: event.senderDeviceId,
+      error: String(error?.message ?? error),
+      failedAt: now(),
+    }
+    await this.store.settings.set("systemFailure", JSON.stringify(failure))
+    this.stopPolling()
+    await this.disconnect()
+    await this.uiEvents.dispatch("system.failure", failure)
+  }
+
+  getSystemFailure = async () => {
+    const settings = await this.store.settings.get()
+    return settings.systemFailure ? JSON.parse(settings.systemFailure) : null
   }
 
   async _ackEvents(eventIds) {
@@ -712,6 +760,11 @@ export class SeptClient {
       this.wsStatus === this.connectionStatuses.CONNECTED
       || this.wsStatus === this.connectionStatuses.CONNECTING
     ) {
+      return
+    }
+    const failure = await this.getSystemFailure()
+    if (failure) {
+      await this.uiEvents.dispatch("system.failure", failure)
       return
     }
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))

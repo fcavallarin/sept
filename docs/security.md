@@ -110,9 +110,13 @@ Policy, admin and device lifecycle changes are distributed as reserved `sept.*` 
 
 The receive pipeline applies system-event handlers only when the sender is locally recognized as an admin.
 
-Relay ACK and local processing are intentionally separate. Once an accepted event has been verified and persisted locally, it is ACKed to the relay. If a system-event handler subsequently fails, the event remains locally unprocessed and is retried during a later processing pass.
+Relay ACK and local processing are intentionally separate. Once an accepted event has been verified and persisted locally, it is ACKed to the relay.
 
-This prevents handler failures from depending on relay redelivery while still ensuring that protocol-state changes are not silently skipped.
+Events are received and processed one at a time, in sequence order: each event is authorized against the state produced by all preceding events. An event emitted before a revoke still runs; one emitted after it is rejected.
+
+If a system-event handler fails, the client enters **system failure**: local protocol state no longer matches the network's, so it stops rather than act on stale state. The failure is persisted (survives restarts); nothing else is downloaded, ACKed or processed (later events stay on the relay); `send()` throws; and the `system.failure` client event is emitted so the application can tell the user to contact an admin. Recovery requires resetting and re-pairing the device. Failures are not retried: without transactional handlers a failed handler may have partially applied its changes.
+
+Any admin, including a compromised one or one running a buggy client, can therefore stop a device with a single malformed system event. This is accepted, since an admin can already change policy and device keys network-wide.
 
 ## Pairing trust bootstrap
 

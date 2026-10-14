@@ -17,7 +17,13 @@ export class AsyncQueue {
     try {
       while (this.queue.length > 0) {
         const item = this.queue.shift();
-        await this.handler(item);
+        try {
+          await this.handler(item);
+        } catch (e) {
+          // push() does not await run(): an escaping error would be an
+          // unhandled rejection and terminate Node processes.
+          console.error("AsyncQueue handler error:", e);
+        }
       }
     } finally {
       this.running = false;

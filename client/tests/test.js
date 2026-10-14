@@ -1,4 +1,4 @@
-import { canonicalJson } from "@sept-protocol/core";
+import { canonicalJson, serializeBin } from "@sept-protocol/core";
 import { BaseSeptApp } from "./base_app.js";
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -559,6 +559,67 @@ class SeptTest {
         "Revoked device still in device_graph"
       )
     }
+  }
+
+  // Must run last: it leaves Device3 permanently in system failure.
+  async test_system_failure(testId) {
+    const client3 = this.appDevice3.septClient
+    const failures = []
+    client3.on("system.failure", f => { failures.push(f) })
+
+    assert(await client3.getSystemFailure() === null, "Device3 should not start in system failure")
+
+    // A sept.device.add for an existing device with different keys cannot be
+    // applied: Device3 must enter system failure.
+    const badKey = serializeBin(new Uint8Array(32).fill(9))
+    await this.appAdmin.send("sept.device.add", {
+      id: this.appDevice1DeviceId,
+      networkId: await this.appAdmin.septClient.getNetworkId(),
+      signPublicKey: badKey,
+      cryptPublicKey: badKey,
+    }, [this.appDevice3DeviceId])
+    // Sent after the failing event: must not be processed
+    await this.appAdmin.send("message", testId, [this.appDevice3DeviceId])
+
+    const d1Before = await client3.store.device.get(this.appDevice1DeviceId)
+
+    await this.appDevice3.sync()
+
+    const failure = await client3.getSystemFailure()
+    assert(failure?.type === "sept.device.add", `System failure not recorded: ${JSON.stringify(failure)}`)
+    assert(failures.length === 1 && failures[0].eventId === failure.eventId, "system.failure event not dispatched")
+
+    const d1After = await client3.store.device.get(this.appDevice1DeviceId)
+    assert(
+      serializeBin(d1After.signPublicKey) === serializeBin(d1Before.signPublicKey),
+      "Conflicting device keys were applied"
+    )
+
+    const stored = await this.appDevice3.getStoredEvents({ type: "message" })
+    assert(!stored.some(e => e.payload === testId), "Event after the failing one was stored")
+
+    // Not ACKed: the later event is still pending on the relay
+    const pending = await client3.callRest("events")
+    assert(pending.json.events.length > 0, "Event after the failing one was ACKed")
+
+    // Nothing else is processed, sent or connected
+    await this.appDevice3.sync()
+    assert(
+      !(await this.appDevice3.getStoredEvents({ type: "message" })).some(e => e.payload === testId),
+      "Event processed after system failure"
+    )
+
+    let failed = false
+    try {
+      await this.appDevice3.send("message", testId, [this.appAdminDeviceId])
+    } catch {
+      failed = true
+    }
+    assert(failed, "send() should throw after system failure")
+
+    await this.appDevice3.connect()
+    assert(client3.getConnectionStatus() === "disconnected", "connect() should not connect after system failure")
+    assert(failures.length === 2, "connect() should dispatch system.failure")
   }
 }
 

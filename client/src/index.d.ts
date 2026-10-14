@@ -152,6 +152,9 @@ export type ConnectionEventName =
   | "connection.error"
   | "connection.message";
 
+/** Local client-state events. */
+export type ClientEventName = "system.failure";
+
 /**
  * Events accepted by {@link SeptClient.on}.
  *
@@ -161,7 +164,24 @@ export type ConnectionEventName =
 export type UiEventName =
   | SystemEventName
   | SeptSystemEventName
+  | ClientEventName
   | ConnectionEventName;
+
+/**
+ * A system event could not be applied, so local protocol state can no longer
+ * be trusted. The client stops: nothing else is downloaded, processed or
+ * sent, persistently across restarts. Recovery requires resetting and
+ * re-pairing the device; applications should tell the user to contact an
+ * admin.
+ */
+export interface SystemFailure {
+  eventId: EventId;
+  type: SeptSystemEventName;
+  senderDeviceId: DeviceId;
+  error: string;
+  /** Unix time (seconds). */
+  failedAt: number;
+}
 
 export type UiEventHandler<TPayload = unknown> = (
   payload: TPayload,
@@ -344,6 +364,9 @@ export class SeptClient {
    * - `admin.revoke`: `{ deviceId, metadata }`
    * - `device.add`: `{ id, networkId, signPublicKey, cryptPublicKey, metadata }`
    * - `device.invalidate`: `{ deviceId }`
+   *
+   * `system.failure` ({@link SystemFailure}) is emitted when a system event
+   * cannot be applied, and again on every `connect()` afterwards.
    *
    * Current connection-event payloads:
    * - `connection.open`: `{}` after the WebSocket opens
@@ -687,4 +710,10 @@ export class SeptClient {
 
   /** Returns a simplified list of locally known admin devices. */
   getAdmins(): Promise<AdminDevice[]>;
+
+  /**
+   * Returns the system failure, or `null` if the client is operating normally.
+   * While set, `sync()` and `connect()` do nothing and `send()` throws.
+   */
+  getSystemFailure(): Promise<SystemFailure | null>;
 }
