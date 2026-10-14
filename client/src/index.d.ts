@@ -549,6 +549,12 @@ export class SeptClient {
    * @param serial When `true`, later event processing waits for the handler.
    * Defaults to `true`.
    *
+   * @remarks
+   * A serial handler runs inside event processing, so it must not `await`
+   * {@link sync}: the sync is queued behind the handler itself and never
+   * resolves, deadlocking the client. Calling `sync()` without awaiting it is
+   * fine, or use {@link registerConcurrent}.
+   *
    * @example
    * ```ts
    * sept.register("message.send", async ({
@@ -576,8 +582,8 @@ export class SeptClient {
    *
    * @remarks
    * Use only when the handler is safe to execute concurrently. Concurrent
-   * handlers run in the background, so their failures are recorded on the
-   * stored event but are not propagated by {@link sync}.
+   * handlers run in the background; as with serial handlers, their failures
+   * are recorded on the stored event and are not propagated by {@link sync}.
    */
   registerConcurrent<TPayload = unknown, TResult = unknown>(
     eventType: EventType,
@@ -620,6 +626,14 @@ export class SeptClient {
    *
    * When `retry` is `true`, failed requests are retried every two seconds until
    * synchronization succeeds.
+   *
+   * Synchronization shares a single queue with WebSocket delivery, so events
+   * are always processed one job at a time, in order.
+   *
+   * @remarks
+   * Do not `await sync()` from a serial event handler or from a client event
+   * handler ({@link on}) of a system event: they run inside a queued job, and
+   * the sync would wait for that same job to finish, deadlocking the client.
    *
    * @param retry Whether failed synchronization should retry indefinitely.
    * @defaultValue `false`

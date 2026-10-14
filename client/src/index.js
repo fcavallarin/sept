@@ -63,6 +63,10 @@ export class SeptClient {
 
     this.pollingTO = null
 
+    // Single queue for all event handling (sync() and WebSocket): events are
+    // always fetched and processed one job at a time, in arrival order.
+    this.eventQueue = new AsyncQueue(job => job())
+
     this.systemEventTypes = [
       "sept.policy.update",
       "sept.admin.grant",
@@ -749,10 +753,20 @@ export class SeptClient {
   }
 
   async _getEvents() {
-    const call = await this._callRest("events", {
-      method: "GET"
-    });
-    await this._handleEvents(call.json.events)
+    // The GET runs inside the queue too, otherwise events pushed via
+    // WebSocket meanwhile could be processed before the fetched ones.
+    return await new Promise((resolve, reject) => {
+      this.eventQueue.push(async () => {
+        try {
+          const call = await this._callRest("events", {
+            method: "GET"
+          });
+          resolve(await this._handleEvents(call.json.events))
+        } catch (e) {
+          reject(e)
+        }
+      })
+    })
   };
 
   connect = async () => {
@@ -783,7 +797,6 @@ export class SeptClient {
       }
     }
 
-    const queue = new AsyncQueue((i) => this._handleEvents([i]))
     const wsUrl = `${wsEndpoint}ws?` +
       `networkId=${networkId}&` +
       `deviceId=${settings.deviceId}&` +
@@ -803,7 +816,7 @@ export class SeptClient {
 
       this.ws.addEventListener("message", (event) => {
         this.uiEvents.dispatch("connection.message", event)
-        queue.push(JSON.parse(event.data))
+        this.eventQueue.push(() => this._handleEvents([JSON.parse(event.data)]))
       });
 
       this.ws.addEventListener("close", () => {

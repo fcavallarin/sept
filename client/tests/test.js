@@ -561,6 +561,44 @@ class SeptTest {
     }
   }
 
+  // sync() and WebSocket delivery must not interleave: every event is
+  // processed exactly once, in send order.
+  async test_event_ordering(testId) {
+    const client1 = this.appDevice1.septClient
+    const N = 20
+    const received = []
+    client1.register(testId, async ({ payload }) => {
+      await sleep(5) // widen the window for interleaving
+      received.push(payload)
+    })
+
+    await this.appDevice1.connect()
+
+    let done = false
+    const syncLoop = (async () => {
+      while (!done) {
+        await client1.sync()
+        await sleep(10)
+      }
+    })()
+
+    for (let i = 0; i < N; i++) {
+      await this.appAdmin.send(testId, i, [this.appDevice1DeviceId])
+    }
+
+    for (let t = 0; t < 100 && received.length < N; t++) {
+      await sleep(100)
+    }
+    done = true
+    await syncLoop
+    await this.appDevice1.disconnect()
+
+    assert(received.length === N, `Expected ${N} events, got ${received.length}: ${JSON.stringify(received)}`)
+    for (let i = 0; i < N; i++) {
+      assert(received[i] === i, `Events out of order: ${JSON.stringify(received)}`)
+    }
+  }
+
   // Must run last: it leaves Device3 permanently in system failure.
   async test_system_failure(testId) {
     const client3 = this.appDevice3.septClient
