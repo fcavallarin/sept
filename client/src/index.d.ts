@@ -385,6 +385,15 @@ export class SeptClient {
   ): void;
 
   /**
+   * Unubscribes to events emitted locally by the SEPT client.
+   *
+   */
+  off<TPayload = unknown>(
+    eventName: UiEventName,
+    handler: UiEventHandler<TPayload>,
+  ): void;
+
+  /**
    * Starts periodic synchronization.
    *
    * @param time Polling interval in seconds.

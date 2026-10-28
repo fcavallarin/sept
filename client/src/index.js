@@ -128,6 +128,10 @@ export class SeptClient {
     this.uiEvents.on(evName, handler)
   }
 
+  off = (eventName, handler) => {
+    this.uiEvents.off(eventName, handler)
+  }
+
   startPolling = (time) => {
     this.pollingTO = setInterval(async () => {
       await this.sync()
