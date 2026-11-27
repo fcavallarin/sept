@@ -115,6 +115,10 @@ export interface AddDeviceResult<TMetadata = Record<string, unknown>> {
 export interface SeptEventHandlerData<TPayload = unknown> {
   payload: TPayload;
   senderDeviceId: DeviceId;
+  /**
+   * Time the sender created the event, in Unix **seconds** (not
+   * milliseconds): multiply by 1000 for a JavaScript `Date`.
+   */
   timestamp: number;
   eventId: EventId;
   sequence: number;
@@ -152,7 +156,8 @@ export type ConnectionEventName =
   | "connection.open"
   | "connection.close"
   | "connection.error"
-  | "connection.message";
+  | "connection.message"
+  | "connection.status";
 
 /** Local client-state events. */
 export type ClientEventName = "system.failure" | "handler.failure";
@@ -213,6 +218,15 @@ export type ConnectionStatus =
   | "disconnected"
   | "disconnecting";
 
+/**
+ * Payload of the `connection.status` client event, emitted on every change of
+ * {@link SeptClient.getConnectionStatus}. `status` is already the value
+ * `getConnectionStatus()` returns when the listener runs.
+ */
+export interface ConnectionStatusChange {
+  status: ConnectionStatus;
+}
+
 export interface Policy {
   allowedEventTypes: EventType[];
 }
@@ -253,6 +267,10 @@ export interface StoredEvent<TPayload = unknown> {
   senderDeviceId: DeviceId;
   payloadKey: Uint8Array;
   payload: TPayload;
+  /**
+   * Time the sender created the event, in Unix **seconds** (not
+   * milliseconds): multiply by 1000 for a JavaScript `Date`.
+   */
   timestamp: number;
   deliveredAt: number | null;
   sequence: number | null;
@@ -350,6 +368,14 @@ export class SeptClient {
   /**
    * Creates and initializes a SEPT client, database adapter and local stores.
    *
+   * @remarks
+   * SEPT needs a cryptographically secure random source:
+   * `globalThis.crypto.getRandomValues` must exist before `@sept-protocol/*`
+   * is imported. Node.js, browsers and Deno provide it. React Native/Hermes
+   * does not: install a polyfill such as `react-native-get-random-values` and
+   * import it first, before any SEPT import. Without it,
+   * key generation fails with "crypto.getRandomValues must be defined".
+   *
    * @example
    * ```ts
    * const sept = await SeptClient.create({
@@ -393,12 +419,19 @@ export class SeptClient {
    * `handler.failure` listener are logged and do not stop event processing.
    *
    * Current connection-event payloads:
-   * - `connection.open`: `{}` after the WebSocket opens
+   * - `connection.open`: `{}` after the WebSocket opens. The client is not
+   *   ready yet: it still synchronizes pending events, and
+   *   `getConnectionStatus()` is still `connecting`.
    * - `connection.close`: `{}` after the WebSocket closes
    * - `connection.error`: `{}` after a WebSocket error
    * - `connection.message`: raw WebSocket message before normal processing
+   * - `connection.status`: {@link ConnectionStatusChange} on every change of
+   *   {@link getConnectionStatus}, including automatic reconnects. Wait for
+   *   `status === "connected"` to know the client is connected and has
+   *   synchronized pending events.
    *
-   * Most applications should not need `connection.message`.
+   * Most applications should not need `connection.message`; to track the
+   * connection state, prefer `connection.status` over `connection.open`.
    *
    * Reserved wire-event names corresponding to system events are documented in
    * `protocol.md#system-event-namespace`.
@@ -449,6 +482,10 @@ export class SeptClient {
   /**
    * Creates a new SEPT network and the first admin/root device.
    *
+   * @throws If the device already has an identity (a network, a device ID or
+   * keys, for example after {@link initDevice}); call {@link resetDevice}
+   * first.
+   *
    * @returns The newly created network ID.
    */
   createNetwork(): Promise<NetworkId>;
@@ -459,12 +496,17 @@ export class SeptClient {
    * SEPT checks policy, encrypts, signs and persists the event, then submits it
    * to the relay.
    *
+   * @returns The ID of the sent event, the same `id` the outgoing event has in
+   * {@link getStoredEvents} (and `eventId` on recipients), so an optimistic
+   * UI can match its pending item to the stored event.
+   *
    * @throws If no valid recipients remain or local authorization denies the
-   * event for a recipient.
+   * event for a recipient. Also if the relay rejects or cannot be reached:
+   * the event has then already been stored locally, without a `sequence`.
    *
    * @example
    * ```ts
-   * await sept.send(
+   * const eventId = await sept.send(
    *   "message.send",
    *   { text: "hello" },
    *   [deviceA, deviceB],
@@ -475,7 +517,7 @@ export class SeptClient {
     type: EventType,
     payload: TPayload,
     dstDeviceIds: DeviceId[],
-  ): Promise<void>;
+  ): Promise<EventId>;
 
   /**
    * Starts admin-side pairing for a new device.
@@ -546,7 +588,10 @@ export class SeptClient {
   /** Closes the current WebSocket connection. */
   disconnect(): Promise<void>;
 
-  /** Returns the current public connection status. */
+  /**
+   * Returns the current public connection status. Every change is also
+   * emitted as the `connection.status` client event.
+   */
   getConnectionStatus(): ConnectionStatus;
 
   /** Returns the current network ID, or `null` when no network is configured. */

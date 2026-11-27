@@ -83,6 +83,7 @@ export class SeptClient {
       "connection.close",
       "connection.error",
       "connection.message",
+      "connection.status",
       // "export.device",
     ])
 
@@ -165,42 +166,75 @@ export class SeptClient {
   }
 
   createNetwork = async () => {
-    const networkStore = this.store.network;
-    const networkId = await networkStore.create();
-    let settings = await this.store.settings.get()
-    if (settings.deviceSignPrivateKey) {
-      throw new Error("cannot bootstrap")
+    const settings = await this.store.settings.get()
+    if (settings.deviceSignPrivateKey || settings.deviceId || await this.getNetworkId()) {
+      throw new Error(
+        "cannot bootstrap: the device already has an identity, call resetDevice() first"
+      )
     }
+
     const signKeys = await generateSigningKeyPair();
     const cryptKeys = await generateEncryptionKeypair();
-    await this.store.settings.set("deviceSignPrivateKey", serializeBin(signKeys.privateKey), true);
-    await this.store.settings.set("deviceCryptPrivateKey", serializeBin(cryptKeys.privateKey), true);
-    const deviceId = await this.store.device.create({
-      networkId,
-      signPublicKey: signKeys.publicKey,
-      cryptPublicKey: cryptKeys.publicKey,
-      role: 'admin'
-    })
-    await this.store.settings.set("deviceId", deviceId);
-    settings = await this.store.settings.get()
+    const networkId = makeId("net", randomBytes(32));
+    const deviceId = makeId("dev", signKeys.publicKey);
+    const signPrivateKey = serializeBin(signKeys.privateKey)
 
-    const body = {
-      networkId,
-      rootDeviceId: settings.deviceId,
-      rootDeviceSignPublicKey: serializeBin(signKeys.publicKey),
-    }
-
-    const call = await this._callRest("bootstrap", {
+    // Not this.restClient: it would be cached with the not-yet-saved identity.
+    const restClient = new RestClient(deviceId, signPrivateKey, this.restEndpoint)
+    const call = await restClient.call("bootstrap", {
       method: "POST",
-      body
+      body: {
+        networkId,
+        rootDeviceId: deviceId,
+        rootDeviceSignPublicKey: serializeBin(signKeys.publicKey),
+      }
     });
 
-    if (call.json.ok) {
-      return networkId;
-    } else {
+    if (!call.json?.ok) {
       throw new Error("server error")
     }
+
+    try {
+      await this.store.network.add(networkId)
+      await this.store.settings.set("deviceSignPrivateKey", signPrivateKey, true);
+      await this.store.settings.set("deviceCryptPrivateKey", serializeBin(cryptKeys.privateKey), true);
+      await this.store.device.add({
+        id: deviceId,
+        networkId,
+        signPublicKey: signKeys.publicKey,
+        cryptPublicKey: cryptKeys.publicKey,
+        role: 'admin'
+      })
+      await this.store.settings.set("deviceId", deviceId);
+    } catch (err) {
+      await this._rollbackCreateNetwork()
+      throw err
+    }
+
+    this.restClient = restClient
+    return networkId;
   };
+
+  // Undoes a partially saved createNetwork(). Only rows createNetwork() writes
+  // are removed: it runs on a device with no network, device or keys, so
+  // app storage is left alone.
+  async _rollbackCreateNetwork() {
+    const steps = [
+      () => this.store.settings.delete("deviceId"),
+      () => this.store.settings.delete("deviceSignPrivateKey"),
+      () => this.store.settings.delete("deviceCryptPrivateKey"),
+      () => this.dbAdapter.write(`DELETE FROM device`, []),
+      () => this.dbAdapter.write(`DELETE FROM network`, []),
+    ]
+    for (const step of steps) {
+      try {
+        await step()
+      } catch (err) {
+        console.error("createNetwork() rollback step failed:", err)
+      }
+    }
+    this.restClient = null
+  }
 
   _isAdminRole(role) {
     return role === "admin"
@@ -295,6 +329,7 @@ export class SeptClient {
 
     const sequence = call.json.sequence;
     await this.store.event.setSequence(eventId, sequence)
+    return eventId
   };
 
   addDevice = async (deviceData, metadata = {}, pairingTimeout = 60) => {
@@ -816,7 +851,7 @@ export class SeptClient {
     const purl = new URL(this.restEndpoint);
     purl.protocol = purl.protocol === "https:" ? "wss:" : "ws:"
     const wsEndpoint = purl.toString();
-    this.wsStatus = this.connectionStatuses.CONNECTING
+    this._setConnectionStatus(this.connectionStatuses.CONNECTING)
     let ticketRes = null
     while (ticketRes === null) {
       try {
@@ -836,7 +871,7 @@ export class SeptClient {
       this.ws.addEventListener("open", () => {
         this.uiEvents.dispatch("connection.open", {})
         this.sync(true).then(() => {
-          this.wsStatus = this.connectionStatuses.CONNECTED
+          this._setConnectionStatus(this.connectionStatuses.CONNECTED)
           resolve()
         }, err => {
           reject(err)
@@ -851,7 +886,7 @@ export class SeptClient {
       this.ws.addEventListener("close", () => {
         this.uiEvents.dispatch("connection.close", {})
         const s = this.wsStatus
-        this.wsStatus = this.connectionStatuses.DISCONNECTED
+        this._setConnectionStatus(this.connectionStatuses.DISCONNECTED)
         if (s === this.connectionStatuses.DISCONNECTING) {
           return
         }
@@ -866,9 +901,22 @@ export class SeptClient {
 
   disconnect = async () => {
     if (this.ws && this.wsStatus !== this.connectionStatuses.DISCONNECTING) {
-      this.wsStatus = this.connectionStatuses.DISCONNECTING
+      this._setConnectionStatus(this.connectionStatuses.DISCONNECTING)
       await this.ws.close();
     }
+  }
+
+  // Every connection status change goes through here, so `connection.status`
+  // listeners see each state, `connected` included. The status is updated
+  // before dispatching: listeners reading getConnectionStatus() see it.
+  _setConnectionStatus(status) {
+    if (this.wsStatus === status) {
+      return
+    }
+    this.wsStatus = status
+    void this.uiEvents.dispatch("connection.status", { status }).catch(err => {
+      console.error("connection.status listener error:", err)
+    })
   }
 
   getConnectionStatus = () => {

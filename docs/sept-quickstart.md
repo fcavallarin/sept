@@ -51,18 +51,29 @@ const sept = await SeptClient.create({
 
 The `open` and `close` functions are supplied by the host application. Use the adapter appropriate for the runtime in which your application runs.
 
-## Create a network
+### Random source
 
-The first device bootstraps a SEPT network and becomes an admin:
+SEPT needs a cryptographically secure random source: `globalThis.crypto.getRandomValues` must exist before any `@sept-protocol/*` module is imported. Node.js, browsers and Deno provide it. React Native/Hermes (Expo included) does not, so install a polyfill and import it first, in your entry file:
 
 ```js
-const networkId = await sept.bootstrap()
+import "react-native-get-random-values" // must come before any SEPT import
+import { SeptClient } from "@sept-protocol/client"
+```
+
+Without it, key generation fails with `crypto.getRandomValues must be defined`.
+
+## Create a network
+
+The first device creates a SEPT network and becomes an admin:
+
+```js
+const networkId = await sept.createNetwork()
 const deviceId = await sept.getDeviceId()
 
 console.log({ networkId, deviceId })
 ```
 
-`bootstrap()` creates local signing/encryption keys, creates the local network and root device records, and registers the network/root signing public key with the relay.
+`createNetwork()` generates signing/encryption keys, registers the network and the root signing public key with the relay, and then saves the local network and root device records. It is all-or-nothing: if any step fails, it rejects and leaves the device without a network, device ID or keys, so the call can simply be retried. It throws if the device already has an identity; call `resetDevice()` first.
 
 ## Initialize a device that will join
 
@@ -133,6 +144,8 @@ sept.register("message.send", async ({
 })
 ```
 
+`timestamp` is the sender's creation time in Unix **seconds**, not milliseconds: use `new Date(timestamp * 1000)`.
+
 Once the handler completes, SEPT stores its return value in `handlerResult`
 and sets `processedAt`. If the handler throws or rejects, the stored event has
 `handlerFailed` set to true and `handlerResult` contains the error string.
@@ -192,12 +205,14 @@ See [Authorization](authorization.md) for the model and admin behavior.
 ## Send an event
 
 ```js
-await sept.send(
+const eventId = await sept.send(
   "message.send",
   { text: "hello" },
   [recipientDeviceId],
 )
 ```
+
+It resolves to the event ID: the `id` of the outgoing event in `getStoredEvents()`, and the `eventId` recipients' handlers receive.
 
 `send()`:
 
@@ -232,6 +247,15 @@ await sept.connect()
 ```
 
 The client opens a WebSocket, synchronizes pending events, and processes pushed events through the same receive pipeline.
+
+To track the connection state, listen to `connection.status`. It fires on every change of `getConnectionStatus()`, automatic reconnects included. `connection.open` only means the WebSocket opened: the client is still `connecting` while it synchronizes.
+
+```js
+sept.on("connection.status", ({ status }) => {
+  // "connecting" | "connected" | "disconnecting" | "disconnected"
+  setOnline(status === "connected")
+})
+```
 
 Disconnect explicitly when required:
 

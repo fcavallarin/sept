@@ -42,6 +42,13 @@ class SeptTest {
     packageJsonCont.dependencies['@sept-protocol/server'] = "../../../server"
     fs.writeFileSync(packageJson, JSON.stringify(packageJsonCont), "utf-8")
 
+    // test_create_network_atomic creates two more networks (one orphaned by a
+    // simulated local failure) and then expects the relay to refuse a fourth.
+    const serverIndex = path.resolve(serverDir, "src", "index.js")
+    const serverIndexCont = fs.readFileSync(serverIndex, "utf-8")
+    assert(serverIndexCont.includes("maxNetworks: 1"), "Unexpected scaffolded server: maxNetworks not found")
+    fs.writeFileSync(serverIndex, serverIndexCont.replace("maxNetworks: 1", "maxNetworks: 3"), "utf-8")
+
     execFileSync(
       "npm", ["install"],
       { stdio: "inherit", cwd: serverDir }
@@ -71,6 +78,8 @@ class SeptTest {
     })
 
     const serverUrl = `http://127.0.0.1:${SERVER_PORT}`
+    this.dataDir = dataDir
+    this.serverUrl = serverUrl
     this.appAdmin = await BaseSeptApp.create("admin", dataDir, serverUrl)
     for (let i = 1; i <= NUM_DEVICES; i++) {
       this[`appDevice${i}`] = await BaseSeptApp.create(`device${i}`, dataDir, serverUrl)
@@ -204,11 +213,117 @@ class SeptTest {
     assert(!connectionOpen, "WS connection close failed")
   }
 
+  // connection.status reports every status change, `connected` included, and
+  // listeners already see the new value from getConnectionStatus().
+  async test_connection_status(testId) {
+    const client1 = this.appDevice1.septClient
+    const statuses = []
+    let statusOnOpen = null
+    const onStatus = ({ status }) => {
+      assert(client1.getConnectionStatus() === status, `getConnectionStatus() is ${client1.getConnectionStatus()} in connection.status(${status})`)
+      statuses.push(status)
+    }
+    const onOpen = () => { statusOnOpen = client1.getConnectionStatus() }
+    client1.on("connection.status", onStatus)
+    client1.on("connection.open", onOpen)
+    try {
+      await this.appDevice1.connect()
+      assert(client1.getConnectionStatus() === "connected", `Status after connect(): ${client1.getConnectionStatus()}`)
+      assert(statusOnOpen === "connecting", `Status on connection.open: ${statusOnOpen}`)
+      await this.appDevice1.disconnect()
+      for (let t = 0; t < 20 && statuses.at(-1) !== "disconnected"; t++) {
+        await sleep(100)
+      }
+    } finally {
+      client1.off("connection.status", onStatus)
+      client1.off("connection.open", onOpen)
+    }
+    const expected = ["connecting", "connected", "disconnecting", "disconnected"]
+    assert(
+      JSON.stringify(statuses) === JSON.stringify(expected),
+      `connection.status sequence: ${JSON.stringify(statuses)}`
+    )
+  }
+
+  // createNetwork() is all-or-nothing: a failure leaves no network, device ID
+  // or keys behind, and the call can be retried.
+  async test_create_network_atomic(testId) {
+    const app = await BaseSeptApp.create("create-network", this.dataDir, "http://127.0.0.1:1")
+    const client = app.septClient
+    const assertNoIdentity = async (when) => {
+      const settings = await client.store.settings.get()
+      assert(await client.getNetworkId() === null, `${when}: network left behind`)
+      assert(await client.getDeviceId() === null, `${when}: deviceId left behind`)
+      assert(!settings.deviceSignPrivateKey && !settings.deviceCryptPrivateKey, `${when}: keys left behind`)
+      assert((await client.getDevices()).length === 0, `${when}: device left behind`)
+    }
+
+    // Relay unreachable
+    let failed = false
+    try {
+      await client.createNetwork()
+    } catch {
+      failed = true
+    }
+    assert(failed, "createNetwork() should fail with an unreachable relay")
+    await assertNoIdentity("Relay unreachable")
+
+    // Local write fails after the relay accepted the network
+    client.restEndpoint = this.serverUrl
+    const deviceAdd = client.store.device.add
+    client.store.device.add = async () => { throw new Error("disk full") }
+    failed = false
+    try {
+      await client.createNetwork()
+    } catch (e) {
+      failed = String(e).includes("disk full")
+    } finally {
+      client.store.device.add = deviceAdd
+    }
+    assert(failed, "createNetwork() should fail when a local write fails")
+    await assertNoIdentity("Local write failed")
+
+    // Retry succeeds
+    const networkId = await client.createNetwork()
+    assert(networkId && await client.getNetworkId() === networkId, "Retried createNetwork() did not save the network")
+    const deviceId = await client.getDeviceId()
+    assert(deviceId, "Retried createNetwork() did not save the deviceId")
+    assert(await client.isCurrentDeviceAdmin(), "Root device should be admin")
+    const ticket = await client.callRest("get-relay-ticket")
+    assert(ticket.json?.ticket, "Relay does not know the new root device")
+
+    // A device with an identity cannot create another network
+    failed = false
+    try {
+      await client.createNetwork()
+    } catch (e) {
+      failed = String(e).includes("cannot bootstrap")
+    }
+    assert(failed, "createNetwork() should refuse a device that already has an identity")
+    assert(await client.getNetworkId() === networkId && await client.getDeviceId() === deviceId, "Refused createNetwork() changed the identity")
+
+    // Relay refuses (network limit reached)
+    await client.resetDevice()
+    failed = false
+    try {
+      await client.createNetwork()
+    } catch (e) {
+      failed = String(e).includes("403")
+    }
+    assert(failed, "createNetwork() should fail when the relay refuses it")
+    await assertNoIdentity("Relay refused")
+  }
+
   async test_send_messages(testId) {
-    await this.appAdmin.send("message", "test1", [this.appDevice1DeviceId])
+    const eventId = await this.appAdmin.send("message", "test1", [this.appDevice1DeviceId])
     console.log(`Message sent admin -> device1`)
+    assert(typeof eventId === "string" && eventId.startsWith("evt"), `send() did not return the event ID: ${eventId}`)
+    const [outgoing] = await this.appAdmin.getStoredEvents({ id: eventId })
+    assert(outgoing?.isOutgoing && outgoing.payload === "test1", "send() returned an ID that does not match the stored outgoing event")
     await this.appDevice1.sync()
     console.log(`Device 1 sync done`)
+    const [incoming] = await this.appDevice1.getStoredEvents({ id: eventId })
+    assert(incoming?.isIncoming && incoming.payload === "test1", "Recipient did not store the event under the ID send() returned")
 
     await this.appDevice1.send("message", "test2", [this.appDevice2DeviceId])
     console.log(`Message sent device1 -> device2`)

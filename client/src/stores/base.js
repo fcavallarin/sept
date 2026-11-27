@@ -9,12 +9,12 @@ import { deserializeBin, makeId, serializeBin, makeIdFromStr, serializeEvent } f
 
 
 export async function resetDb(db) {
-  await db.write(`DROP TABLE network`);
-  await db.write(`DROP TABLE setting`);
-  await db.write(`DROP TABLE device`);
-  await db.write(`DROP TABLE event`);
   await db.write(`DROP TABLE event_recipient`);
   await db.write(`DROP TABLE device_graph_edge`);
+  await db.write(`DROP TABLE event`);
+  await db.write(`DROP TABLE device`);
+  await db.write(`DROP TABLE network`);
+  await db.write(`DROP TABLE setting`);
   await db.write(`DROP TABLE app_kv_store`);
   await createTables(db)
 

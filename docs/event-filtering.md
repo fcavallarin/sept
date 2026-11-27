@@ -27,14 +27,14 @@ The documented event fields are:
 | `id` | Event ID |
 | `type` | Application or SEPT system event type |
 | `senderDeviceId` | Sender device ID |
-| `timestamp` | Sender-provided event timestamp |
+| `timestamp` | Sender-provided event timestamp, Unix seconds |
 | `deliveredAt` | Local delivery timestamp, when available |
 | `sequence` | Relay-assigned sequence number |
 | `isSystem` | Whether this is a SEPT system event |
 | `isOutgoing` | Whether the local device sent the event |
 | `isIncoming` | Whether the local device received the event |
 | `hasAttachment` | Whether the event has an attachment |
-| `processedAt` | Handler completion timestamp, or `null` while pending |
+| `processedAt` | Handler completion timestamp (Unix seconds), or `null` while pending |
 | `handlerResult` | Handler return value, or the stored error string |
 | `handlerFailed` | Whether handler processing failed |
 | `createdAt` | Local persistence timestamp |
