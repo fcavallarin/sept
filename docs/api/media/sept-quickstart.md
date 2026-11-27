@@ -137,6 +137,17 @@ Once the handler completes, SEPT stores its return value in `handlerResult`
 and sets `processedAt`. If the handler throws or rejects, the stored event has
 `handlerFailed` set to true and `handlerResult` contains the error string.
 
+A failed handler does not stop event processing: the remaining events in the
+same batch are still handled, `sync()` does not reject because of it, and the
+failed event is not retried. The client reports the failure through the local
+`handler.failure` event (logged with `console.error` when nobody listens):
+
+```js
+sept.on("handler.failure", ({ eventId, type, senderDeviceId, error }) => {
+  console.warn(`Handler for ${type} failed on ${eventId}: ${error}`)
+})
+```
+
 Handlers are serial by default. If an application event may run independently of later events:
 
 ```js
@@ -146,8 +157,8 @@ sept.registerConcurrent("telemetry.sample", async ({ payload }) => {
 ```
 
 Concurrent handlers run in the background. Their completion state is still
-recorded on the stored event, but their failures are not propagated by
-`sync()`.
+recorded on the stored event and their failures are reported through
+`handler.failure`, but they are not propagated by `sync()`.
 
 System event types such as `sept.policy.update` are owned by SEPT and cannot be registered as application handlers.
 

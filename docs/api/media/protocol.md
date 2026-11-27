@@ -165,6 +165,8 @@ The client then:
 
 ACK means that the relay no longer needs to deliver the event to this recipient. For accepted events, local persistence occurs before ACK. ACK does not imply successful handler execution.
 
+A failing application handler does not stop local processing. The client records the failure on the stored event (`processedAt`, `handlerResult` holding the error string, `handlerFailed`), emits the local `handler.failure` event and continues with the next event, so one malformed application event cannot hold back the rest of a batch. The failed event is not retried. System events behave differently; see [System event namespace](#system-event-namespace).
+
 A policy-denied application event is discarded and ACKed without being persisted or delivered to the application handler.
 
 ## Synchronization and delivery
@@ -208,7 +210,15 @@ These are handled internally rather than through application `register()`
 handlers. After updating local state, the client emits the corresponding local
 client event documented in the [Client API](api/classes/SeptClient.html#on).
 
-A received system event is applied only when the sender is locally recognized as an admin. System events are treated as non-skippable during local processing. If a system-event handler fails, the event remains locally unprocessed and is retried during a subsequent processing pass. This retry is independent of relay delivery: the event has already been ACKed after it was successfully received and persisted.
+A received system event is applied only when the sender is locally recognized as an admin; one from a non-admin sender is marked as processed and ignored. System events are treated as non-skippable during local processing: if a system event cannot be applied, local protocol state no longer matches the network's, so the client enters a persistent system failure instead of retrying (without transactional handlers, a failed handler may have partially applied its changes; see [security.md](security.md)). The failing event stays locally unprocessed, with the error recorded in `handlerResult` and `handlerFailed` set, and the client:
+
+- stores the failure, so it survives restarts and is returned by `getSystemFailure()`;
+- stops polling and closes the WebSocket;
+- emits the local `system.failure` client event, and again on every later `connect()`;
+- stops downloading, persisting, ACKing and processing events: the events after the failing one stay pending on the relay;
+- refuses to `send()`.
+
+The failing event itself has already been ACKed, since it was successfully received and persisted. Recovery requires resetting and re-pairing the device; applications should tell the user to contact an admin.
 
 ## Pairing
 
