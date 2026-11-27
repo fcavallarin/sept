@@ -599,6 +599,46 @@ class SeptTest {
     }
   }
 
+  // A throwing application handler is recorded and reported, but must not
+  // abort the batch: sync() resolves and the next event is still handled.
+  async test_handler_failure(testId) {
+    const client1 = this.appDevice1.septClient
+    const received = []
+    const failures = []
+    client1.register(testId, async ({ payload }) => {
+      if (payload === "bad") {
+        throw new Error("malformed payload")
+      }
+      received.push(payload)
+    })
+    client1.on("handler.failure", f => { failures.push(f) })
+
+    // Device1 is disconnected: both events arrive in the same sync() batch.
+    await this.appAdmin.send(testId, "bad", [this.appDevice1DeviceId])
+    await this.appAdmin.send(testId, "good", [this.appDevice1DeviceId])
+
+    await client1.sync()
+
+    assert(received.length === 1 && received[0] === "good", `Event after the failing one not handled: ${JSON.stringify(received)}`)
+
+    const [bad] = await client1.getStoredEvents({ type: testId, payload: "bad" })
+    assert(bad, "Failing event not stored")
+    assert(bad.handlerFailed, "Failing event not marked as handlerFailed")
+    assert(bad.processedAt !== null, "Failing event not marked as processed")
+    assert(String(bad.handlerResult).includes("malformed payload"), `Wrong handlerResult: ${bad.handlerResult}`)
+
+    const [good] = await client1.getStoredEvents({ type: testId, payload: "good" })
+    assert(good && !good.handlerFailed && good.processedAt !== null, "Event after the failing one not processed")
+
+    assert(failures.length === 1, `handler.failure dispatched ${failures.length} times`)
+    assert(failures[0].eventId === bad.id && failures[0].type === testId, `Wrong handler.failure payload: ${JSON.stringify(failures[0])}`)
+    assert(failures[0].error === "malformed payload", `Wrong handler.failure error: ${failures[0].error}`)
+
+    // Both events were ACKed: nothing left pending on the relay
+    const pending = await client1.callRest("events")
+    assert(pending.json.events.length === 0, `Events still pending after sync: ${pending.json.events.length}`)
+  }
+
   // Must run last: it leaves Device3 permanently in system failure.
   async test_system_failure(testId) {
     const client3 = this.appDevice3.septClient

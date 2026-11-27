@@ -125,7 +125,9 @@ export interface SeptEventHandlerData<TPayload = unknown> {
  *
  * The handler may return a value. After it settles, SEPT stores the result with
  * the event and marks the event as processed. If it throws or rejects, SEPT
- * stores the error string and marks handler processing as failed.
+ * stores the error string, marks handler processing as failed and emits
+ * `handler.failure` ({@link HandlerFailure}); event processing continues with
+ * the next event.
  */
 export type SeptEventHandler<
   TPayload = unknown,
@@ -153,7 +155,7 @@ export type ConnectionEventName =
   | "connection.message";
 
 /** Local client-state events. */
-export type ClientEventName = "system.failure";
+export type ClientEventName = "system.failure" | "handler.failure";
 
 /**
  * Events accepted by {@link SeptClient.on}.
@@ -178,6 +180,23 @@ export interface SystemFailure {
   eventId: EventId;
   type: SeptSystemEventName;
   senderDeviceId: DeviceId;
+  error: string;
+  /** Unix time (seconds). */
+  failedAt: number;
+}
+
+/**
+ * An application event handler registered with {@link SeptClient.register}
+ * threw or rejected. The failure is also recorded on the stored event
+ * (`processedAt`, `handlerResult`, `handlerFailed`). Unlike
+ * {@link SystemFailure}, it does not stop the client: the event is not
+ * retried and processing continues with the next event.
+ */
+export interface HandlerFailure {
+  eventId: EventId;
+  type: EventType;
+  senderDeviceId: DeviceId;
+  /** The error message thrown by the handler. */
   error: string;
   /** Unix time (seconds). */
   failedAt: number;
@@ -368,6 +387,11 @@ export class SeptClient {
    * `system.failure` ({@link SystemFailure}) is emitted when a system event
    * cannot be applied, and again on every `connect()` afterwards.
    *
+   * `handler.failure` ({@link HandlerFailure}) is emitted when an application
+   * handler registered with {@link register} throws or rejects. Without a
+   * listener, the failure is logged with `console.error`. Errors thrown by a
+   * `handler.failure` listener are logged and do not stop event processing.
+   *
    * Current connection-event payloads:
    * - `connection.open`: `{}` after the WebSocket opens
    * - `connection.close`: `{}` after the WebSocket closes
@@ -551,7 +575,12 @@ export class SeptClient {
    *
    * The handler may return a value. After the handler settles, SEPT stores the
    * result with the event and marks it as processed. If the handler throws or
-   * rejects, SEPT stores the error string and marks handler processing as failed.
+   * rejects, SEPT stores the error string, marks handler processing as failed
+   * (`processedAt` is set, `handlerFailed` is `true`) and emits
+   * `handler.failure` ({@link HandlerFailure}). A failed handler does not stop
+   * event processing: the remaining events of the same batch are still
+   * handled, and {@link sync} does not reject because of it. The failed event
+   * is not retried.
    *
    * SEPT-reserved system event types cannot be registered through this API.
    *
@@ -592,7 +621,8 @@ export class SeptClient {
    * @remarks
    * Use only when the handler is safe to execute concurrently. Concurrent
    * handlers run in the background; as with serial handlers, their failures
-   * are recorded on the stored event and are not propagated by {@link sync}.
+   * are recorded on the stored event, reported through `handler.failure` and
+   * are not propagated by {@link sync}.
    */
   registerConcurrent<TPayload = unknown, TResult = unknown>(
     eventType: EventType,

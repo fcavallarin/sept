@@ -78,6 +78,7 @@ export class SeptClient {
     this.uiEvents = new EventBus([
       ...this.systemEventTypes,
       "system.failure",
+      "handler.failure",
       "connection.open",
       "connection.close",
       "connection.error",
@@ -680,33 +681,32 @@ export class SeptClient {
         sequence: event.sequence,
       }
 
+      // An application handler failure is recorded on the event and
+      // reported, but never stops processing: the rest of the batch must
+      // still be delivered, and sync() must not reject because of it.
       const runHandler = async () => {
+        let result
         try {
-          const result = await registration.handler(handlerPayload)
-
-          await this.store.event.update(event.id, {
-            processedAt: now(),
-            handlerResult: result,
-            handlerFailed: false,
-          })
+          result = await registration.handler(handlerPayload)
         } catch (error) {
           await this.store.event.update(event.id, {
             processedAt: now(),
             handlerResult: String(error),
             handlerFailed: true,
           })
-
-          throw error
+          await this._handlerFailure(event, error)
+          return
         }
+
+        await this.store.event.update(event.id, {
+          processedAt: now(),
+          handlerResult: result,
+          handlerFailed: false,
+        })
       };
 
       if (registration.serial) {
-        try {
-          await runHandler()
-        } catch (error) {
-          // Recorded on the event; must not stop processing.
-          console.error(`Event handler error for ${event.id}:`, error)
-        }
+        await runHandler()
       } else {
         void runHandler().catch((error) => {
           console.error(
@@ -735,6 +735,31 @@ export class SeptClient {
     this.stopPolling()
     await this.disconnect()
     await this.uiEvents.dispatch("system.failure", failure)
+  }
+
+  // Reports an application handler failure through the local
+  // `handler.failure` event, or the console when nobody listens. A failing
+  // listener is logged and must not stop event processing either.
+  async _handlerFailure(event, error) {
+    const failure = {
+      eventId: event.id,
+      type: event.type,
+      senderDeviceId: event.senderDeviceId,
+      error: String(error?.message ?? error),
+      failedAt: now(),
+    }
+    if (this.uiEvents.listeners["handler.failure"].length === 0) {
+      console.error(`Event handler error for ${event.id}:`, error)
+      return
+    }
+    try {
+      await this.uiEvents.dispatch("handler.failure", failure)
+    } catch (listenerError) {
+      console.error(
+        `handler.failure listener error for ${event.id}:`,
+        listenerError
+      )
+    }
   }
 
   getSystemFailure = async () => {
