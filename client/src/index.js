@@ -67,6 +67,10 @@ export class SeptClient {
     // always fetched and processed one job at a time, in arrival order.
     this.eventQueue = new AsyncQueue(job => job())
 
+    // Outgoing deliveries (send() and resends) run one at a time, in order.
+    // Jobs here never wait for eventQueue, so eventQueue jobs may wait here.
+    this.outboxQueue = new AsyncQueue(job => job())
+
     this.systemEventTypes = [
       "sept.policy.update",
       "sept.admin.grant",
@@ -79,6 +83,7 @@ export class SeptClient {
       ...this.systemEventTypes,
       "system.failure",
       "handler.failure",
+      "event.delivery",
       "connection.open",
       "connection.close",
       "connection.error",
@@ -303,34 +308,121 @@ export class SeptClient {
     }
     const ts = now()
     const eventId = makeIdFromStr("evt", serializeEvent(networkId, "", recipients, senderDeviceId, encryptedPayload, ts))
-    await this._addEvent(networkId, eventId, type, senderDeviceId, recipients, evPayload.payload, payloadKey, null, ts)
-    const event = await eventStore.get(eventId);
+    // Stored with its ciphertext: until the relay accepts it, the event sits
+    // in the outbox and is resent under this same ID.
+    await this._addEvent(networkId, eventId, type, senderDeviceId, recipients, evPayload.payload, payloadKey, null, ts, encryptedPayload)
+    // Delivers this event, after any older undelivered one. A relay failure
+    // does not reject: the outcome is reported through `event.delivery`.
+    await this._resendPending()
+    return eventId
+  };
+
+  // Runs `fn` in the outbox queue: deliveries happen one at a time, in send
+  // order, and the same event is never posted twice concurrently.
+  _inOutbox(fn) {
+    return new Promise((resolve, reject) => {
+      this.outboxQueue.push(async () => {
+        try {
+          resolve(await fn())
+        } catch (e) {
+          reject(e)
+        }
+      })
+    })
+  }
+
+  // Posts the undelivered outgoing events, oldest first. Called by send() and
+  // sync(). Stops when the relay looks unreachable: later events would fail
+  // too, and must not overtake earlier ones. An event the relay fails on by
+  // itself (plain 500) is skipped and stays queued, so it cannot block the
+  // events after it.
+  _resendPending = () => this._inOutbox(async () => {
+    if (await this.getSystemFailure()) {
+      return
+    }
+    for (const event of await this.store.event.getUndelivered()) {
+      if (await this._deliverEvent(event) === "unreachable") {
+        return
+      }
+    }
+  })
+
+  // Posts one stored outgoing event to the relay, rebuilding the original
+  // request from what was stored (signatures are deterministic). Returns
+  // "delivered", "failed" (permanently refused), "pending" (this event
+  // failed temporarily, retry later) or "unreachable" (retry later, and so
+  // every event after it).
+  async _deliverEvent(event) {
+    const deviceData = await this._getDeviceData()
+    const { networkId } = deviceData
+    const eventId = event.id
+    const recipients = (await this.store.event.getRecipients(eventId)).map(r => ({
+      deviceId: r.deviceId,
+      encryptedPayloadKey: r.encryptedPayloadKey,
+    }))
+    const { senderDeviceId, encryptedPayload, timestamp } = event
     const relaySignature = await signString(
       deviceData.signPrivateKey,
-      serializeEvent(networkId, eventId, recipients, senderDeviceId, encryptedPayload, event.timestamp)
+      serializeEvent(networkId, eventId, recipients, senderDeviceId, encryptedPayload, timestamp)
     );
     const signature = await signString(
       deviceData.signPrivateKey,
-      serializeEvent(networkId, eventId, [], senderDeviceId, encryptedPayload, event.timestamp)
+      serializeEvent(networkId, eventId, [], senderDeviceId, encryptedPayload, timestamp)
     );
-    const postBody = {
-      eventId,
-      senderDeviceId,
-      encryptedPayload,
-      recipients,
-      timestamp: event.timestamp,
-      signature: serializeBin(signature),
-      relaySignature: serializeBin(relaySignature)
-    }
-    const call = await this._callRest("event", {
-      method: "POST",
-      body: postBody
-    });
 
-    const sequence = call.json.sequence;
-    await this.store.event.setSequence(eventId, sequence)
-    return eventId
-  };
+    let call
+    try {
+      call = await this._callRest("event", {
+        method: "POST",
+        body: {
+          eventId,
+          senderDeviceId,
+          encryptedPayload,
+          recipients,
+          timestamp,
+          signature: serializeBin(signature),
+          relaySignature: serializeBin(relaySignature)
+        }
+      });
+    } catch (err) {
+      if (!this._isPermanentDeliveryError(err)) {
+        return err?.status === 500 ? "pending" : "unreachable"
+      }
+      const error = err.code ? `REST ${err.status}: ${err.code}` : String(err?.message ?? err)
+      await this.store.event.update(eventId, {
+        deliveryFailed: true,
+        deliveryError: error,
+      })
+      this._dispatchDelivery({ eventId, status: "failed", error })
+      return "failed"
+    }
+
+    const sequence = call.json.sequence
+    // The ciphertext is only needed for resending.
+    await this.store.event.update(eventId, { sequence, encryptedPayload: null })
+    this._dispatchDelivery({ eventId, status: "delivered", sequence })
+    return "delivered"
+  }
+
+  // A refusal for this event that resending cannot fix. Network errors, 5xx,
+  // 408/429 and clock-related refusals (request-auth `invalid_signature`,
+  // e.g. clock skew, and an event timestamp ahead of the relay's clock) are
+  // temporary.
+  _isPermanentDeliveryError(err) {
+    const status = err?.status
+    if (!status || status < 400 || status >= 500 || status === 408 || status === 429) {
+      return false
+    }
+    return !["invalid_signature", "timestamp is in the future"].includes(err.code)
+  }
+
+  // Not awaited: a listener may call send(), which waits for the outbox
+  // queue this runs in.
+  _dispatchDelivery(delivery) {
+    void this.uiEvents.dispatch("event.delivery", delivery).catch(err => {
+      console.error("event.delivery listener error:", err)
+    })
+  }
 
   addDevice = async (deviceData, metadata = {}, pairingTimeout = 60) => {
     const networkStore = this.store.network
@@ -526,6 +618,7 @@ export class SeptClient {
     payloadKey,
     sequence,
     timestamp,
+    encryptedPayload = null,
   ) {
     const isOutgoing = Boolean(dstDeviceIds)
     const isIncoming = !isOutgoing
@@ -543,6 +636,7 @@ export class SeptClient {
       isOutgoing,
       isIncoming,
       timestamp,
+      encryptedPayload,
     )
   }
 
@@ -822,6 +916,9 @@ export class SeptClient {
     return await new Promise((resolve, reject) => {
       this.eventQueue.push(async () => {
         try {
+          // Resend what the relay has not accepted yet. Its failures never
+          // reject sync(): they leave the events queued for the next one.
+          await this._resendPending()
           const call = await this._callRest("events", {
             method: "GET"
           });

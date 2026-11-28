@@ -41,7 +41,7 @@ export class BaseSeptApp {
     this.clientName = clientName;
   }
 
-  async init(dataDir, serverUrl) {
+  async init(dataDir, serverUrl, { clearDb = true } = {}) {
 
     const fmDbPath = path.resolve(dataDir, `sept-${this.clientName}.db`);
 
@@ -52,7 +52,7 @@ export class BaseSeptApp {
         type: "better-sqlite",
         open: () => openDb(fmDbPath),
         close: (store) => store.close(),
-        clearDb: true // for debugging/dev
+        clearDb // true for debugging/dev; false reopens an existing database
       },
 
     })
@@ -66,9 +66,9 @@ export class BaseSeptApp {
       }
     )
   }
-  static async create(clientName, dataDir, serverUrl) {
+  static async create(clientName, dataDir, serverUrl, options) {
     const i = new this(clientName)
-    await i.init(dataDir, serverUrl)
+    await i.init(dataDir, serverUrl, options)
     return i;
 
   }

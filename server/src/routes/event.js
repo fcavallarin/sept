@@ -34,6 +34,21 @@ export async function createEvent(request, env, params, ctx) {
     throw httpError(400, 'timestamp is in the future');
   }
 
+  // Idempotent: a sender resends an event when it did not get the response
+  // (e.g. the connection dropped after the relay stored it). The event ID is
+  // bound to the signed event material, so the same ID is the same event:
+  // return its sequence instead of storing and delivering it twice.
+  const existing = await db.readOne(
+    `SELECT network_id, sender_device_id, sequence FROM event WHERE id = ?`,
+    [eventId]
+  )
+  if (existing) {
+    if (existing.networkId !== networkId || existing.senderDeviceId !== senderDeviceId) {
+      throw httpError(409, 'event id conflict');
+    }
+    return json({ ok: true, networkId, sequence: existing.sequence });
+  }
+
   const { results } = await db.write(
     `UPDATE counter
     SET value = value + 1

@@ -659,13 +659,16 @@ class SeptTest {
     const devices1 = await this.appDevice1.septClient.getDevices()
 
     assert(devices1.length === devices.length - 1, "Device not invalidated")
-    let exception = false
-    try {
-      await this.appDevice2.send("message", testId, [this.appDevice1DeviceId])
-    } catch {
-      exception = true
-    }
-    assert(exception, "Exception not raised after device invalidation")
+    // The relay refuses the invalidated device. send() does not reject on
+    // relay failures: the event stays undelivered and never reaches Device1.
+    const eventId = await this.appDevice2.send("message", testId, [this.appDevice1DeviceId])
+    const [sent] = await this.appDevice2.getStoredEvents({ id: eventId })
+    assert(sent && sent.sequence === null, "Relay accepted an event from an invalidated device")
+    await this.appDevice1.sync()
+    assert(
+      !(await this.appDevice1.getStoredEvents({ type: "message" })).some(e => e.payload === testId),
+      "Device1 received an event from an invalidated device"
+    )
 
     const graph = await this.appDevice1.septClient.getACL()
     for (const g of graph) {
@@ -752,6 +755,174 @@ class SeptTest {
     // Both events were ACKed: nothing left pending on the relay
     const pending = await client1.callRest("events")
     assert(pending.json.events.length === 0, `Events still pending after sync: ${pending.json.events.length}`)
+  }
+
+  // Patches the admin's REST calls to POST /event; restore() undoes it.
+  _patchAdminPostEvent(patch) {
+    const admin = this.appAdmin.septClient
+    const callRest = admin._callRest
+    admin._callRest = async (path, options) => {
+      if (path === "event" && options?.method === "POST") {
+        return await patch(() => callRest.call(admin, path, options), options)
+      }
+      return await callRest.call(admin, path, options)
+    }
+    return () => { admin._callRest = callRest }
+  }
+
+  // An event the relay did not get is kept and resent with the same ID on the
+  // next sync(); the recipient gets it exactly once.
+  async test_resend_undelivered(testId) {
+    const admin = this.appAdmin.septClient
+    const received = []
+    this.appDevice1.septClient.register(testId, ({ payload, eventId }) => { received.push({ payload, eventId }) })
+    const deliveries = []
+    const onDelivery = d => { deliveries.push(d) }
+    admin.on("event.delivery", onDelivery)
+
+    try {
+      // 1. Relay unreachable on the first POST: send() resolves, the event is queued
+      const restore = this._patchAdminPostEvent(async () => { throw new TypeError("fetch failed") })
+      let eventId
+      try {
+        eventId = await this.appAdmin.send(testId, "queued", [this.appDevice1DeviceId])
+      } finally {
+        restore()
+      }
+      let [stored] = await admin.getStoredEvents({ id: eventId })
+      assert(stored && stored.sequence === null && !stored.deliveryFailed, `Undelivered event not queued: ${JSON.stringify(stored)}`)
+      const undelivered = await admin.getStoredEvents({ isOutgoing: true, sequence__is: null, deliveryFailed: false })
+      assert(undelivered.some(e => e.id === eventId), "Queued event not listed as undelivered")
+      assert(deliveries.length === 0, `Unexpected event.delivery: ${JSON.stringify(deliveries)}`)
+
+      await this.appDevice1.sync()
+      assert(received.length === 0, "Recipient got an event the relay never accepted")
+
+      // sync() resends it under the same ID
+      await this.appAdmin.sync()
+      ;[stored] = await admin.getStoredEvents({ id: eventId })
+      assert(stored.sequence !== null, "Event not resent by sync()")
+      assert(stored.encryptedPayload === null, "Ciphertext kept after delivery")
+      assert(deliveries.length === 1 && deliveries[0].eventId === eventId && deliveries[0].status === "delivered" && deliveries[0].sequence === stored.sequence, `Wrong event.delivery: ${JSON.stringify(deliveries)}`)
+
+      await this.appDevice1.sync()
+      await this.appDevice1.sync()
+      assert(received.length === 1 && received[0].eventId === eventId && received[0].payload === "queued", `Resent event not received exactly once: ${JSON.stringify(received)}`)
+
+      // 2. The relay stored the event but the response was lost: the resend
+      // gets the same sequence back and nothing is delivered twice.
+      let relaySequence = null
+      const restore2 = this._patchAdminPostEvent(async (post) => {
+        relaySequence = (await post()).json.sequence
+        throw new TypeError("connection reset")
+      })
+      let eventId2
+      try {
+        eventId2 = await this.appAdmin.send(testId, "response-lost", [this.appDevice1DeviceId])
+      } finally {
+        restore2()
+      }
+      ;[stored] = await admin.getStoredEvents({ id: eventId2 })
+      assert(relaySequence !== null && stored.sequence === null, "Lost response not simulated")
+      await this.appAdmin.sync()
+      ;[stored] = await admin.getStoredEvents({ id: eventId2 })
+      assert(stored.sequence === relaySequence, `Resend got sequence ${stored.sequence}, relay had ${relaySequence}`)
+
+      await this.appDevice1.sync()
+      await this.appDevice1.sync()
+      const got2 = received.filter(r => r.eventId === eventId2)
+      assert(got2.length === 1, `Event with a lost response received ${got2.length} times`)
+      const stillPending = await this.appDevice1.septClient.callRest("events")
+      assert(!stillPending.json.events.some(e => e.eventId === eventId2), "Duplicate left pending on the relay")
+
+      // 3. A permanent refusal stops the retries and is reported
+      const restore3 = this._patchAdminPostEvent(async () => {
+        const err = new Error("REST: 404")
+        err.status = 404
+        err.code = "unauthorized"
+        throw err
+      })
+      let eventId3
+      try {
+        eventId3 = await this.appAdmin.send(testId, "refused", [this.appDevice1DeviceId])
+      } finally {
+        restore3()
+      }
+      ;[stored] = await admin.getStoredEvents({ id: eventId3 })
+      assert(stored.deliveryFailed && stored.sequence === null && stored.deliveryError === "REST 404: unauthorized", `Refused event not marked failed: ${JSON.stringify(stored)}`)
+      const failed = deliveries.filter(d => d.eventId === eventId3)
+      assert(failed.length === 1 && failed[0].status === "failed" && failed[0].error === "REST 404: unauthorized", `Wrong event.delivery for refusal: ${JSON.stringify(failed)}`)
+      await this.appAdmin.sync()
+      ;[stored] = await admin.getStoredEvents({ id: eventId3 })
+      assert(stored.sequence === null, "Permanently refused event was resent")
+      await this.appDevice1.sync()
+      assert(!received.some(r => r.eventId === eventId3), "Recipient got a refused event")
+
+      // 4. An event the relay keeps failing on (500) stays queued but does not
+      // block the events sent after it
+      let poisonedId = null
+      const restore4 = this._patchAdminPostEvent(async (post, options) => {
+        if (poisonedId === null || options.body.eventId === poisonedId) {
+          const err = new Error("REST: 500")
+          err.status = 500
+          err.code = "internal_error"
+          throw err
+        }
+        return await post()
+      })
+      let eventId5
+      try {
+        poisonedId = await this.appAdmin.send(testId, "poisoned", [this.appDevice1DeviceId])
+        eventId5 = await this.appAdmin.send(testId, "after-poisoned", [this.appDevice1DeviceId])
+        await this.appAdmin.sync()
+      } finally {
+        restore4()
+      }
+      const [poisoned] = await admin.getStoredEvents({ id: poisonedId })
+      const [after] = await admin.getStoredEvents({ id: eventId5 })
+      assert(poisoned.sequence === null && !poisoned.deliveryFailed, `Event failing with 500 not kept queued: ${JSON.stringify(poisoned)}`)
+      assert(after.sequence !== null, "An event failing with 500 blocked the next one")
+      await this.appAdmin.sync()
+      const [recovered] = await admin.getStoredEvents({ id: poisonedId })
+      assert(recovered.sequence !== null, "Event failing with 500 not resent once the relay recovered")
+      await this.appDevice1.sync()
+      for (const id of [poisonedId, eventId5]) {
+        const n = received.filter(r => r.eventId === id).length
+        assert(n === 1, `${id} received ${n} times`)
+      }
+    } finally {
+      admin.off("event.delivery", onDelivery)
+    }
+  }
+
+  // Opening a version-1 database adds the resend columns; undelivered events
+  // from before (no stored ciphertext) are marked as not resendable.
+  async test_db_migration_v2(testId) {
+    const app = await BaseSeptApp.create("migration", this.dataDir, this.serverUrl)
+    const db = app.septClient.dbAdapter
+    // Turn the fresh database back into a version-1 one
+    for (const col of ["encrypted_payload", "delivery_failed", "delivery_error"]) {
+      await db.write(`ALTER TABLE event DROP COLUMN ${col}`, [])
+    }
+    await db.write(`PRAGMA user_version = 1`, [])
+    const insert = `INSERT INTO event (id, type, sender_device_id, payload_key, payload, timestamp, sequence, is_system, is_outgoing, is_incoming)
+      VALUES (?, 'message', 'dev_x', 'key', '"x"', 1, ?, 0, ?, ?)`
+    await db.write(insert, ["evt_undelivered", null, 1, 0])
+    await db.write(insert, ["evt_delivered", 7, 1, 0])
+    await db.write(insert, ["evt_incoming", 8, 0, 1])
+
+    const reopened = await BaseSeptApp.create("migration", this.dataDir, this.serverUrl, { clearDb: false })
+    const client = reopened.septClient
+    const version = (await client.dbAdapter.readOne("PRAGMA user_version")).userVersion
+    assert(version === 2, `DB version after migration: ${version}`)
+    const byId = async id => (await client.getStoredEvents({ id }))[0]
+    const undelivered = await byId("evt_undelivered")
+    assert(undelivered.deliveryFailed && String(undelivered.deliveryError).startsWith("cannot resend"), `Old undelivered event not marked: ${JSON.stringify(undelivered)}`)
+    for (const id of ["evt_delivered", "evt_incoming"]) {
+      const e = await byId(id)
+      assert(!e.deliveryFailed && e.deliveryError === null, `${id} wrongly marked: ${JSON.stringify(e)}`)
+    }
+    assert((await client.store.event.getUndelivered()).length === 0, "Old undelivered event would be resent")
   }
 
   // Must run last: it leaves Device3 permanently in system failure.

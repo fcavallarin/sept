@@ -224,6 +224,22 @@ It resolves to the event ID: the `id` of the outgoing event in `getStoredEvents(
 6. stores the outgoing event locally;
 7. posts the encrypted event to the relay.
 
+`send()` throws only for local errors (no valid recipient, local policy denies it, system failure), and then stores nothing. Relay failures do not reject: the event stays in a local outbox.
+
+- If the relay is unreachable or fails temporarily, the event keeps `sequence === null` and is resent with the same ID on every `sync()` (and so after `connect()`) until the relay accepts it. The relay deduplicates by event ID, so recipients get it once.
+- If the relay refuses it permanently (for example the sender was revoked), the event gets `deliveryFailed` and `deliveryError` and is not resent.
+
+Do not call `send()` again to retry: that creates a second event. To show delivery state, listen to `event.delivery`, or list what is still waiting:
+
+```js
+sept.on("event.delivery", ({ eventId, status, error }) => {
+  // status: "delivered" (accepted by the relay) or "failed" (permanently refused)
+  markMessage(eventId, status, error)
+})
+
+const waiting = await sept.getStoredEvents({ isOutgoing: true, sequence__is: null, deliveryFailed: false })
+```
+
 ## Observe client events
 
 In addition to application events, the SDK emits local client events for SEPT

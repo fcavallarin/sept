@@ -131,6 +131,10 @@ The current request body includes fields conceptually equivalent to:
 
 The application `type` is not sent as a top-level relay field; it is available only after decrypting `{type,payload}` on a recipient device. The relay still observes routing and transport metadata such as sender/recipient IDs, timestamps, ciphertext sizes and the event identifier. See [Security](security.md).
 
+### 7. Resend until accepted
+
+The sender keeps the encrypted payload of an outgoing event until the relay accepts it (returns a sequence). If the request fails temporarily (relay unreachable, 5xx, 408/429, or a clock-related refusal), the client rebuilds the same request from local state and resends it on the next synchronization: same `eventId`, `timestamp`, ciphertext and wrapped keys, and identical signatures (Ed25519 signatures are deterministic). A permanent refusal (any other 4xx) marks the event as failed and stops the resends. Outgoing events are posted one at a time, in send order; a resend pass stops when the relay looks unreachable, but skips an event the relay fails on by itself (500), which stays queued, so it cannot block the events after it.
+
 ## Relay processing
 
 For established devices, relay HTTP requests are signed by the device and authenticated against the device signing public key stored in D1.
@@ -140,13 +144,16 @@ When receiving an event, the relay:
 1. authenticates the request/device;
 2. checks that the authenticated device matches `senderDeviceId`;
 3. verifies the relay-facing event signature;
-4. increments a network-wide/current server event sequence counter;
-5. stores the encrypted event;
-6. creates one pending row for each valid, non-revoked recipient belonging to the same network;
-7. pushes the recipient-specific event through the network Durable Object if the recipient is connected;
-8. invokes the server-side `event.received` plugin hook.
+4. if it already stores an event with this `eventId` from the same sender and network, returns that event's sequence and stops: a resend after a lost response is neither stored nor delivered twice (an ID held by another sender or network is refused with 409);
+5. increments a network-wide/current server event sequence counter;
+6. stores the encrypted event;
+7. creates one pending row for each valid, non-revoked recipient belonging to the same network;
+8. pushes the recipient-specific event through the network Durable Object if the recipient is connected;
+9. invokes the server-side `event.received` plugin hook.
 
 The relay does not need the plaintext application payload to route the event.
+
+The deduplication in step 4 lasts as long as the relay keeps the event, that is until every recipient has ACKed it. A resend after that is stored and delivered again; recipients then discard it as a duplicate by `eventId`.
 
 ## Receiving an event
 

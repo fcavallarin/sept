@@ -160,7 +160,7 @@ export type ConnectionEventName =
   | "connection.status";
 
 /** Local client-state events. */
-export type ClientEventName = "system.failure" | "handler.failure";
+export type ClientEventName = "system.failure" | "handler.failure" | "event.delivery";
 
 /**
  * Events accepted by {@link SeptClient.on}.
@@ -206,6 +206,31 @@ export interface HandlerFailure {
   /** Unix time (seconds). */
   failedAt: number;
 }
+
+/**
+ * Final outcome of delivering an outgoing event to the relay, emitted as the
+ * `event.delivery` client event. It is emitted once per event: temporary
+ * failures are not reported, the event just stays queued (see
+ * {@link SeptClient.send}).
+ */
+export type EventDelivery =
+  | {
+    eventId: EventId;
+    /** The relay accepted the event and will deliver it to its recipients. */
+    status: "delivered";
+    /** Relay-assigned sequence, now also on the stored event. */
+    sequence: number;
+  }
+  | {
+    eventId: EventId;
+    /**
+     * The relay permanently refused the event (for example the sender was
+     * revoked). It is not resent; the stored event has `deliveryFailed` set.
+     */
+    status: "failed";
+    /** Same as the stored event's `deliveryError`. */
+    error: string;
+  };
 
 export type UiEventHandler<TPayload = unknown> = (
   payload: TPayload,
@@ -289,6 +314,27 @@ export interface StoredEvent<TPayload = unknown> {
   handlerFailed: StoredBoolean;
 
   createdAt: string;
+
+  /**
+   * Outgoing events only: the ciphertext kept while the relay has not
+   * accepted the event, so it can be resent under the same ID. `null` once
+   * delivered.
+   */
+  encryptedPayload: string | null;
+
+  /**
+   * Outgoing events only: the relay permanently refused the event, so it is
+   * no longer resent. An outgoing event with `sequence === null` and
+   * `deliveryFailed` false is still queued for delivery.
+   */
+  deliveryFailed: StoredBoolean;
+
+  /**
+   * Why delivery failed permanently (e.g. `REST 404: unauthorized`), or
+   * `null`. Events left undelivered by older clients, which did not keep the
+   * ciphertext, cannot be resent and have a `cannot resend: …` error.
+   */
+  deliveryError: string | null;
 
   /**
    * Present when the event store returns a row produced by the recipient LEFT JOIN.
@@ -418,6 +464,10 @@ export class SeptClient {
    * listener, the failure is logged with `console.error`. Errors thrown by a
    * `handler.failure` listener are logged and do not stop event processing.
    *
+   * `event.delivery` ({@link EventDelivery}) is emitted once per outgoing
+   * event, when the relay accepts it (`delivered`) or permanently refuses it
+   * (`failed`), whether on the first attempt in {@link send} or on a resend.
+   *
    * Current connection-event payloads:
    * - `connection.open`: `{}` after the WebSocket opens. The client is not
    *   ready yet: it still synchronizes pending events, and
@@ -494,15 +544,31 @@ export class SeptClient {
    * Sends an application event.
    *
    * SEPT checks policy, encrypts, signs and persists the event, then submits it
-   * to the relay.
+   * to the relay, after any older event still waiting for delivery.
    *
-   * @returns The ID of the sent event, the same `id` the outgoing event has in
+   * Relay failures do not reject. The event is stored first and stays in a
+   * local outbox until the relay accepts it:
+   * - temporary failures (relay unreachable, 5xx, 408/429, clock-related
+   *   refusals): the event stays queued (`sequence === null`) and is resent
+   *   with the same ID on every {@link sync} (and so after {@link connect})
+   *   until it is accepted. The relay deduplicates by event ID, so a resend
+   *   after a lost response is not delivered twice.
+   * - permanent refusals (other 4xx): the event gets `deliveryFailed` and
+   *   `deliveryError` and is no longer resent.
+   *
+   * The outcome is reported through the `event.delivery` client event
+   * ({@link EventDelivery}). Undelivered events can be listed with
+   * `getStoredEvents({ isOutgoing: true, sequence__is: null })`. Do not call
+   * `send()` again to retry: that creates a second event with a new ID.
+   *
+   * @returns The ID of the event, the same `id` the outgoing event has in
    * {@link getStoredEvents} (and `eventId` on recipients), so an optimistic
-   * UI can match its pending item to the stored event.
+   * UI can match its pending item to the stored event. Resolves once the
+   * first delivery attempt is over, whatever its outcome.
    *
-   * @throws If no valid recipients remain or local authorization denies the
-   * event for a recipient. Also if the relay rejects or cannot be reached:
-   * the event has then already been stored locally, without a `sequence`.
+   * @throws If the client is in system failure, no valid recipients remain or
+   * local authorization denies the event for a recipient. Nothing is stored
+   * in these cases.
    *
    * @example
    * ```ts
@@ -707,6 +773,10 @@ export class SeptClient {
   /**
    * Pulls pending events through REST and feeds them into the normal receive
    * pipeline.
+   *
+   * Before pulling, it resends the outgoing events the relay has not accepted
+   * yet (see {@link send}). A failed resend does not reject `sync()`: the
+   * events stay queued for the next one.
    *
    * When `retry` is `true`, failed requests are retried every two seconds until
    * synchronization succeeds.

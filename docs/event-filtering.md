@@ -38,6 +38,10 @@ The documented event fields are:
 | `handlerResult` | Handler return value, or the stored error string |
 | `handlerFailed` | Whether handler processing failed |
 | `createdAt` | Local persistence timestamp |
+| `deliveryFailed` | Outgoing events: whether the relay permanently refused the event |
+| `deliveryError` | Outgoing events: why delivery failed permanently, or `null` |
+
+Outgoing events still waiting for the relay have `sequence` `null`: `{ isOutgoing: true, sequence__is: null, deliveryFailed: false }` lists the ones that are queued for resending.
 
 Boolean values can be passed as JavaScript booleans:
 

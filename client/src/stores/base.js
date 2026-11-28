@@ -17,7 +17,29 @@ export async function resetDb(db) {
   await db.write(`DROP TABLE setting`);
   await db.write(`DROP TABLE app_kv_store`);
   await createTables(db)
+  await db.write(`PRAGMA user_version = ${DB_VERSION}`);
+}
 
+// createTables() always creates the latest schema (DB_VERSION). MIGRATIONS[n]
+// upgrades a database from version n to n + 1.
+const DB_VERSION = 2
+
+const MIGRATIONS = {
+  // 1 -> 2: outgoing events keep their ciphertext until the relay accepts
+  // them, so an undelivered event can be resent with the same event ID.
+  1: async (db) => {
+    await db.write(`ALTER TABLE event ADD COLUMN encrypted_payload TEXT`);
+    await db.write(`ALTER TABLE event ADD COLUMN delivery_failed INTEGER DEFAULT 0`);
+    await db.write(`ALTER TABLE event ADD COLUMN delivery_error TEXT`);
+    // Undelivered events sent before this version have no stored
+    // ciphertext: they cannot be resent under their event ID.
+    await db.write(`
+      UPDATE event
+      SET delivery_failed = 1,
+          delivery_error = 'cannot resend: sent before undelivered events were kept for resending'
+      WHERE is_outgoing = 1 AND sequence IS NULL
+    `);
+  },
 }
 
 export async function initDb(db, force = false) {
@@ -29,16 +51,19 @@ export async function initDb(db, force = false) {
     } catch { }
   }
 
-  const dbVersion = (await db.readOne('PRAGMA user_version')).userVersion
+  let dbVersion = (await db.readOne('PRAGMA user_version')).userVersion
 
-  if (dbVersion > 0) {
+  if (dbVersion === 0) {
+    await createTables(db)
+    await db.write(`PRAGMA user_version = ${DB_VERSION}`);
     return
   }
 
-  await db.write(`PRAGMA user_version = 1`);
-
-  await createTables(db)
-
+  while (dbVersion < DB_VERSION) {
+    await MIGRATIONS[dbVersion](db)
+    dbVersion++
+    await db.write(`PRAGMA user_version = ${dbVersion}`);
+  }
 }
 
 async function createTables(db) {
@@ -91,7 +116,10 @@ async function createTables(db) {
       processed_at INTEGER,
       handler_result TEXT,
       handler_failed INTEGER DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      encrypted_payload TEXT,
+      delivery_failed INTEGER DEFAULT 0,
+      delivery_error TEXT
     );
   `);
 

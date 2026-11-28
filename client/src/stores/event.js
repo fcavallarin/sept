@@ -125,6 +125,30 @@ export class EventStore extends BaseStore {
     await this.db.write(`UPDATE event set sequence = ? where id = ?`, [sequence, eventId])
   }
 
+  // Outgoing events the relay has not accepted yet and that can still be
+  // resent, oldest first.
+  async getUndelivered() {
+    const events = await this.db.read(`
+      SELECT * FROM event
+      WHERE is_outgoing = 1
+        AND sequence IS NULL
+        AND delivery_failed = 0
+        AND encrypted_payload IS NOT NULL
+      ORDER BY rowid ASC
+    `, [])
+    return events.map(d => this.deserialize(d));
+  }
+
+  // Recipients of an outgoing event, with their wrapped payload keys, in the
+  // order they were stored.
+  async getRecipients(eventId) {
+    return await this.db.read(`
+      SELECT device_id, encrypted_payload_key FROM event_recipient
+      WHERE event_id = ?
+      ORDER BY rowid ASC
+    `, [eventId])
+  }
+
   async add(networkId,
     type,
     recipients,
@@ -137,6 +161,7 @@ export class EventStore extends BaseStore {
     isOutgoing,
     isIncoming,
     ts,
+    encryptedPayload = null,
   ) {
     if (!id) {
       throw new Error("Missing event id")
@@ -152,6 +177,7 @@ export class EventStore extends BaseStore {
       isOutgoing,
       isIncoming,
       timestamp: ts,
+      encryptedPayload,
     })
     // @TODO: Transaction here!!
     await this.db.write(

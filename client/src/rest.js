@@ -28,7 +28,14 @@ export class RestClient {
     const body = await response.text();
 
     if (!response.ok) {
-      throw new Error(`REST: ${response.status}`)
+      const err = new Error(`REST: ${response.status}`)
+      // Relay errors are `{ error: code, message }`: expose the code so
+      // callers can tell temporary failures from permanent refusals.
+      err.status = response.status
+      try {
+        err.code = JSON.parse(body)?.error
+      } catch { }
+      throw err
     }
 
     let json;
