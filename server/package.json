@@ -11,7 +11,7 @@
   "bugs": {
     "url": "https://github.com/fcavallarin/sept/issues"
   },
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "main": "./src/index.js",
   "exports": {
@@ -21,8 +21,8 @@
     "src"
   ],
   "dependencies": {
-    "@sept-protocol/crypto": "^0.1.4",
-    "@sept-protocol/core": "^0.1.4"
+    "@sept-protocol/crypto": "^0.1.5",
+    "@sept-protocol/core": "^0.1.5"
   },
   "publishConfig": {
     "access": "public"
